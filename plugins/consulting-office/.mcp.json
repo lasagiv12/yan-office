@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "microsoft": {
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "${CLAUDE_PLUGIN_ROOT}/mcp/microsoft.ps1"]
+    }
+  }
+}
