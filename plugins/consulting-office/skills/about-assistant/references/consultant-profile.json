@@ -1,0 +1,17 @@
+{
+  "profile_id": "yan",
+  "consultant_name": "יאן",
+  "practice": "ייעוץ עסקי וגישור",
+  "language": "he",
+  "date_format": "DD/MM/YYYY",
+  "currency": "₪",
+  "vat_rate": 0.18,
+  "clients_root": "לקוחות",
+  "platform": "לא נבחר עדיין (Claude או ChatGPT)",
+  "brand": {
+    "logo": null,
+    "primary_color": null,
+    "deck_template": null
+  },
+  "guide_url": "https://claude.ai/artifact/3uD7z1K3YFuEGWagcebcuY"
+}
