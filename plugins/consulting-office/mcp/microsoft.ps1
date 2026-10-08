@@ -16,7 +16,7 @@ $Utf8 = New-Object System.Text.UTF8Encoding($false)
 [Console]::InputEncoding = $Utf8
 [Console]::OutputEncoding = $Utf8
 
-$ServerVersion = '0.3.0'
+$ServerVersion = '0.4.0'
 $TimeZone = 'Israel Standard Time'
 $Graph = 'https://graph.microsoft.com/v1.0'
 $DataDir = Join-Path $env:APPDATA 'ConsultingOffice'
@@ -184,7 +184,7 @@ $Tools = @(
      description = 'Lists the attachments of a message (id, name, size, type).'
      props = @{ message_id = @{ type = 'string' } }; required = @('message_id') },
   @{ name = 'mail_save_attachment'; title = 'שמירת קובץ מצורף'; readOnly = $false
-     description = 'Saves one attachment to a local folder (for example the client''s 07 נכנסים folder). Never overwrites: adds a number if the name exists.'
+     description = 'Saves one attachment to a local folder (for example the client''s 07 לתיוק folder). Never overwrites: adds a number if the name exists.'
      props = @{ message_id = @{ type = 'string' }; attachment_id = @{ type = 'string' }; folder = @{ type = 'string' } }; required = @('message_id', 'attachment_id', 'folder') },
   @{ name = 'mail_create_draft'; title = 'טיוטת מייל'; readOnly = $false
      description = 'Creates a draft in the user''s Outlook Drafts folder (nothing is sent). For a reply pass reply_to_message_id; the text is placed above the quoted message. Body is plain text; Hebrew is fine.'
@@ -195,6 +195,9 @@ $Tools = @(
   @{ name = 'calendar_events'; title = 'אירועים ביומן'; readOnly = $true
      description = 'Lists calendar events between start and end (YYYY-MM-DD or YYYY-MM-DDTHH:MM, Israel time). Optional query filters by text in the subject. Use it to answer what is scheduled and when the user is free.'
      props = @{ start = @{ type = 'string' }; end = @{ type = 'string' }; query = @{ type = 'string' } }; required = @('start', 'end') },
+  @{ name = 'calendar_event_read'; title = 'קריאת אירוע'; readOnly = $true
+     description = 'Returns one calendar event with its full plain-text notes (the consultant writes meeting notes inside the event). Use it to bring past meeting notes into the client file.'
+     props = @{ event_id = @{ type = 'string' } }; required = @('event_id') },
   @{ name = 'calendar_create_event'; title = 'קביעת אירוע'; readOnly = $false; destructive = $true
      description = 'Creates an event in the user''s own calendar (Israel time). With attendees, Outlook sends them invitations, so attendees require confirmed=true after the user approved the exact event.'
      props = @{ subject = @{ type = 'string' }; start = @{ type = 'string' }; end = @{ type = 'string' }; location = @{ type = 'string' }; body = @{ type = 'string' }; attendees = @{ type = 'array'; items = @{ type = 'string' } }; online_meeting = @{ type = 'boolean' }; confirmed = @{ type = 'boolean' } }; required = @('subject', 'start', 'end') },
@@ -369,6 +372,13 @@ function Tool-CalendarEvents($a) {
   return @($events | ForEach-Object { Format-Event $_ })
 }
 
+function Tool-CalendarEventRead($a) {
+  $e = Invoke-Graph 'GET' "/me/events/$($a.event_id)?`$select=id,subject,start,end,location,organizer,attendees,isOnlineMeeting,bodyPreview,webLink,body" "outlook.timezone=`"$TimeZone`", outlook.body-content-type=`"text`""
+  $out = Format-Event $e
+  $out['notes'] = (Get-Prop (Get-Prop $e 'body' $null) 'content' '')
+  return $out
+}
+
 function Tool-CalendarCreate($a) {
   $attendees = @(Get-Prop $a 'attendees' @())
   if ($attendees.Count) { Require-Confirmed $a 'Inviting attendees' }
@@ -434,7 +444,8 @@ $Handlers = @{
   mail_search = ${function:Tool-MailSearch}; mail_read = ${function:Tool-MailRead}
   mail_attachments = ${function:Tool-MailAttachments}; mail_save_attachment = ${function:Tool-MailSaveAttachment}
   mail_create_draft = ${function:Tool-MailCreateDraft}; mail_send_draft = ${function:Tool-MailSendDraft}
-  calendar_events = ${function:Tool-CalendarEvents}; calendar_create_event = ${function:Tool-CalendarCreate}
+  calendar_events = ${function:Tool-CalendarEvents}; calendar_event_read = ${function:Tool-CalendarEventRead}
+  calendar_create_event = ${function:Tool-CalendarCreate}
   calendar_update_event = ${function:Tool-CalendarUpdate}; calendar_cancel_event = ${function:Tool-CalendarCancel}
   onedrive_search = ${function:Tool-OneDriveSearch}; onedrive_list = ${function:Tool-OneDriveList}
 }

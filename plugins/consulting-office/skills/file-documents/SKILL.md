@@ -1,6 +1,6 @@
 ---
 name: file-documents
-description: Files incoming documents into the right place in a client's folder with clear names, after approval. Use for "תתייק את הנכנסים של...", "תתייק את הקובץ הזה", "סדר את המסמכים של...", or when files are dropped into 07 נכנסים or attached in the chat.
+description: Files incoming documents into the right place in a client's folder with clear names, after approval. Use for "תתייק את הקבצים החדשים של...", "תתייק את הנכנסים של...", "תתייק את הקובץ הזה", "סדר את המסמכים של...", or when files are dropped into 07 לתיוק or attached in the chat.
 ---
 
 # תיוק מסמכים
@@ -8,7 +8,7 @@ description: Files incoming documents into the right place in a client's folder 
 קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/approval-flow.md`.
 
 ## שלבים
-1. **רשימת הקבצים:** כל מה שב-`07 נכנסים` של הלקוח, או הקובץ שצורף בשיחה.
+1. **רשימת הקבצים:** כל מה שב-`07 לתיוק` של הלקוח, או הקובץ שצורף בשיחה.
 2. **קוראים כל קובץ:** מספיק כדי להבין מה הוא. סוג (הצעת מחיר, חוזה, דוח, ניתוח, הערות פגישה, תמלול, מצגת), תאריך או תקופה, ממי.
 3. **מציעים לכל קובץ:**
    - **שם חדש:** `<YYYY-MM-DD או YYYY-MM> <סוג> <תיאור קצר>.<סיומת>`, למשל `2026-10-02 הצעת מחיר מכשירי רפורמר.docx`. שמות כמו `scan_0042` תמיד מוחלפים.

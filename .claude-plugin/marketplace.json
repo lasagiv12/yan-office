@@ -9,7 +9,7 @@
       "name": "consulting-office",
       "source": "./plugins/consulting-office",
       "description": "עוזר למשרד ייעוץ עסקי: תיק לקוח, סיכומי פגישות, משימות, הכנה לפגישה, מצגות, ומייל, יומן ו-OneDrive. כל שינוי עובר אישור.",
-      "version": "0.3.0"
+      "version": "0.4.0"
     }
   ]
 }
