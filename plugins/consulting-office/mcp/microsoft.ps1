@@ -16,7 +16,7 @@ $Utf8 = New-Object System.Text.UTF8Encoding($false)
 [Console]::InputEncoding = $Utf8
 [Console]::OutputEncoding = $Utf8
 
-$ServerVersion = '0.4.0'
+$ServerVersion = '0.4.1'
 $TimeZone = 'Israel Standard Time'
 $Graph = 'https://graph.microsoft.com/v1.0'
 $DataDir = Join-Path $env:APPDATA 'ConsultingOffice'
@@ -30,9 +30,33 @@ function Log($text) { [Console]::Error.WriteLine("[microsoft] $text") }
 
 # ---------- config and secure storage ----------
 
+# Without a registration of its own, sign-in uses Microsoft's public "Microsoft Graph Command Line Tools"
+# client (the one Graph PowerShell uses) against any work account, so no IDs are needed. ms_configure can
+# still point at an app registered in the consultant's own tenant if his IT admin prefers that.
+$DefaultTenant = 'organizations'
+$DefaultClient = '14d82eec-204b-4c2f-b7e8-296a70dab67e'
+
 function Get-Config {
-  if (-not (Test-Path $ConfigPath)) { return $null }
+  if (-not (Test-Path $ConfigPath)) {
+    return [pscustomobject]@{ tenant_id = $DefaultTenant; client_id = $DefaultClient; allow_send = $false; default = $true }
+  }
   return Get-Content -Raw -Encoding UTF8 $ConfigPath | ConvertFrom-Json
+}
+
+function Get-AdminConsentUrl {
+  $cfg = Get-Config
+  $scopes = ((Get-Scopes $cfg) -split ' ' | Where-Object { $_ -ne 'offline_access' } | ForEach-Object { "https://graph.microsoft.com/$_" }) -join ' '
+  return "https://login.microsoftonline.com/$($cfg.tenant_id)/v2.0/adminconsent?client_id=$($cfg.client_id)&scope=$([uri]::EscapeDataString($scopes))&redirect_uri=$([uri]::EscapeDataString('https://login.microsoftonline.com/common/oauth2/nativeclient'))"
+}
+
+function Explain-AuthError($code, $text) {
+  if ("$code $text" -match 'AADSTS65001|AADSTS90094|AADSTS90008|consent|admin approval|admin_consent') {
+    return "צריך אישור חד-פעמי של מנהל Microsoft 365 בארגון (לרוב איש המחשבים). הוא פותח את הקישור הזה, נכנס עם חשבון המנהל שלו ומאשר (Accept): $(Get-AdminConsentUrl) . אחר כך מפעילים ms_sign_in שוב. ($code)"
+  }
+  if ("$code $text" -match 'AADSTS53003|Conditional Access') {
+    return "מדיניות האבטחה של הארגון (Conditional Access) חוסמת את הכניסה. רק מנהל המערכת יכול לאפשר. ($code)"
+  }
+  return "$code $text"
 }
 
 function Save-Config($tenant, $client, $allowSend) {
@@ -90,14 +114,13 @@ function Invoke-Form($url, $fields) {
 function Get-AccessToken {
   if ($script:AccessToken -and [DateTime]::UtcNow -lt $script:AccessExpires) { return $script:AccessToken }
   $cfg = Get-Config
-  if (-not $cfg) { throw 'NOT_CONFIGURED: run ms_configure with tenant_id and client_id first.' }
   $refresh = Get-RefreshToken
   if (-not $refresh) { throw 'NOT_SIGNED_IN: run ms_sign_in, then ms_sign_in_complete.' }
   $r = Invoke-Form "https://login.microsoftonline.com/$($cfg.tenant_id)/oauth2/v2.0/token" @{
     client_id = $cfg.client_id; grant_type = 'refresh_token'; refresh_token = $refresh; scope = (Get-Scopes $cfg)
   }
   if (-not ($r.PSObject.Properties.Name -contains 'access_token')) {
-    throw "SIGN_IN_EXPIRED: $($r.error_description) Run ms_sign_in again."
+    throw ("SIGN_IN_EXPIRED: " + (Explain-AuthError $r.error $r.error_description) + " Run ms_sign_in again.")
   }
   if ($r.PSObject.Properties.Name -contains 'refresh_token') { Save-RefreshToken $r.refresh_token }
   $script:AccessToken = $r.access_token
@@ -166,8 +189,8 @@ $Tools = @(
      description = 'Shows whether the Microsoft 365 connection is configured and signed in, and as whom. Call this first when mail, calendar or OneDrive is needed.'
      props = @{}; required = @() },
   @{ name = 'ms_configure'; title = 'הגדרת החיבור'; readOnly = $false
-     description = 'One-time setup: saves the Entra tenant ID and app (client) ID from the app registration. allow_send enables sending mail (default false: drafts only).'
-     props = @{ tenant_id = @{ type = 'string' }; client_id = @{ type = 'string' }; allow_send = @{ type = 'boolean' } }; required = @('tenant_id', 'client_id') },
+     description = 'Optional settings. Not needed to connect: sign-in works without any IDs. allow_send enables sending mail (default false: drafts only). tenant_id and client_id only if the IT admin registered a dedicated app in Entra and wants it used.'
+     props = @{ tenant_id = @{ type = 'string' }; client_id = @{ type = 'string' }; allow_send = @{ type = 'boolean' } }; required = @() },
   @{ name = 'ms_sign_in'; title = 'כניסה לחשבון Microsoft'; readOnly = $false
      description = 'Starts sign-in. Returns a short code and a web address; tell the user to open the address, enter the code and sign in with his own Microsoft 365 account. Then call ms_sign_in_complete.'
      props = @{}; required = @() },
@@ -223,28 +246,33 @@ function To-DateTime($text, $endOfDay) {
 
 function Tool-Status($a) {
   $cfg = Get-Config
-  if (-not $cfg) { return 'לא מוגדר. צריך ms_configure עם tenant_id ו-client_id מרישום האפליקציה ב-Entra.' }
-  if (-not (Test-Path $TokenPath)) { return "מוגדר (tenant $($cfg.tenant_id)), אבל עוד לא נכנסו לחשבון. הצעד הבא: ms_sign_in." }
+  if (-not (Test-Path $TokenPath)) { return 'עוד לא נכנסו לחשבון Microsoft. לא צריך מזהים: הצעד הבא הוא ms_sign_in.' }
   $me = Invoke-Graph 'GET' '/me?$select=displayName,mail,userPrincipalName'
   $send = if ($cfg.allow_send) { 'מופעלת (רק עם אישור לכל מייל)' } else { 'כבויה: טיוטות בלבד' }
   return "מחובר בשם $($me.displayName) ($($me.mail)). שליחת מייל: $send."
 }
 
 function Tool-Configure($a) {
-  if ($a.tenant_id -notmatch '^[0-9a-fA-F-]{36}$' -or $a.client_id -notmatch '^[0-9a-fA-F-]{36}$') {
-    throw 'tenant_id ו-client_id צריכים להיות מזהים בפורמט GUID (36 תווים) מעמוד האפליקציה ב-Entra.'
+  $cfg = Get-Config
+  $tenant = Get-Prop $a 'tenant_id' $cfg.tenant_id
+  $client = Get-Prop $a 'client_id' $cfg.client_id
+  if (-not $tenant) { $tenant = $DefaultTenant }
+  if (-not $client) { $client = $DefaultClient }
+  if ($tenant -notmatch '^([0-9a-fA-F-]{36}|organizations|[A-Za-z0-9.-]+\.[A-Za-z]{2,})$' -or $client -notmatch '^[0-9a-fA-F-]{36}$') {
+    throw 'tenant_id: מזהה GUID או דומיין של הארגון. client_id: מזהה GUID. אפשר גם בלי שניהם.'
   }
-  Save-Config $a.tenant_id $a.client_id (Get-Prop $a 'allow_send' $false)
-  if (Test-Path $TokenPath) { Remove-Item $TokenPath -Force }
-  $script:AccessToken = $null
+  $allow = Get-Prop $a 'allow_send' $cfg.allow_send
+  $changed = ($tenant -ne $cfg.tenant_id) -or ($client -ne $cfg.client_id) -or ([bool]$allow -ne [bool]$cfg.allow_send)
+  Save-Config $tenant $client $allow
+  if ($changed -and (Test-Path $TokenPath)) { Remove-Item $TokenPath -Force; $script:AccessToken = $null; return 'נשמר. צריך להיכנס שוב: ms_sign_in.' }
+  if (Test-Path $TokenPath) { return 'נשמר.' }
   return 'נשמר. הצעד הבא: ms_sign_in.'
 }
 
 function Tool-SignIn($a) {
   $cfg = Get-Config
-  if (-not $cfg) { throw 'NOT_CONFIGURED: run ms_configure first.' }
   $r = Invoke-Form "https://login.microsoftonline.com/$($cfg.tenant_id)/oauth2/v2.0/devicecode" @{ client_id = $cfg.client_id; scope = (Get-Scopes $cfg) }
-  if (-not ($r.PSObject.Properties.Name -contains 'device_code')) { throw "Sign-in could not start: $($r.error_description)" }
+  if (-not ($r.PSObject.Properties.Name -contains 'device_code')) { throw ("הכניסה לא התחילה: " + (Explain-AuthError $r.error $r.error_description)) }
   $pending = [ordered]@{ device_code = $r.device_code; interval = [int]$r.interval; expires = [DateTime]::UtcNow.AddSeconds([int]$r.expires_in).ToString('o') }
   New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
   [IO.File]::WriteAllText($PendingPath, ($pending | ConvertTo-Json), $Utf8)
@@ -272,7 +300,7 @@ function Tool-SignInComplete($a) {
     switch ($r.error) {
       'authorization_pending' { Start-Sleep -Seconds $interval }
       'slow_down' { $interval += 5; Start-Sleep -Seconds $interval }
-      default { Remove-Item $PendingPath -Force -ErrorAction SilentlyContinue; throw "הכניסה נכשלה: $($r.error) $($r.error_description)" }
+      default { Remove-Item $PendingPath -Force -ErrorAction SilentlyContinue; throw ("הכניסה נכשלה: " + (Explain-AuthError $r.error $r.error_description)) }
     }
   }
   return 'הכניסה עוד לא הושלמה. אחרי שמסיימים בדפדפן, הפעל ms_sign_in_complete שוב.'
