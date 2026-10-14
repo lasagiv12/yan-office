@@ -1,7 +1,7 @@
 ﻿# Microsoft 365 connector for the consulting-office plugin: an MCP server over stdio.
 # Mail (search, read, attachments, drafts, send when allowed), calendar (read, create, update,
 # cancel) and OneDrive (search, list) through Microsoft Graph, signed in as the consultant himself
-# (device code flow, delegated permissions only, no client secret).
+# (device code or browser sign-in with PKCE, delegated permissions only, no client secret).
 #
 # Runs on Windows PowerShell 5.1, which ships with Windows, so nothing has to be installed.
 # Config and the refresh token live in %APPDATA%\ConsultingOffice; the token is encrypted with
@@ -13,10 +13,15 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $Utf8 = New-Object System.Text.UTF8Encoding($false)
-[Console]::InputEncoding = $Utf8
-[Console]::OutputEncoding = $Utf8
+# Read and write the raw stdio streams as UTF-8. Setting [Console]::*Encoding throws in Windows PowerShell
+# when the host starts us without a console window, which is how desktop apps launch MCP servers.
+$StdIn = New-Object IO.StreamReader([Console]::OpenStandardInput(), $Utf8)
+$StdOut = New-Object IO.StreamWriter([Console]::OpenStandardOutput(), $Utf8)
+$StdOut.AutoFlush = $true
+# Windows PowerShell 5.1 can serialize arrays as {"value":[...],"Count":n} because of this type data.
+Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue
 
-$ServerVersion = '0.4.1'
+$ServerVersion = '0.5.0'
 $TimeZone = 'Israel Standard Time'
 $Graph = 'https://graph.microsoft.com/v1.0'
 $DataDir = Join-Path $env:APPDATA 'ConsultingOffice'
@@ -25,6 +30,7 @@ $TokenPath = Join-Path $DataDir 'microsoft-token.dat'
 $PendingPath = Join-Path $DataDir 'microsoft-pending.json'
 $script:AccessToken = $null
 $script:AccessExpires = [DateTime]::MinValue
+$script:Browser = $null
 
 function Log($text) { [Console]::Error.WriteLine("[microsoft] $text") }
 
@@ -45,13 +51,21 @@ function Get-Config {
 
 function Get-AdminConsentUrl {
   $cfg = Get-Config
-  $scopes = ((Get-Scopes $cfg) -split ' ' | Where-Object { $_ -ne 'offline_access' } | ForEach-Object { "https://graph.microsoft.com/$_" }) -join ' '
+  # Always include Mail.Send, so one approval also covers turning sending on later. Drafts-only stays the default.
+  $scopes = (@('User.Read', 'Mail.ReadWrite', 'Mail.Send', 'Calendars.ReadWrite', 'Files.Read.All') | ForEach-Object { "https://graph.microsoft.com/$_" }) -join ' '
   return "https://login.microsoftonline.com/$($cfg.tenant_id)/v2.0/adminconsent?client_id=$($cfg.client_id)&scope=$([uri]::EscapeDataString($scopes))&redirect_uri=$([uri]::EscapeDataString('https://login.microsoftonline.com/common/oauth2/nativeclient'))"
 }
 
 function Explain-AuthError($code, $text) {
+  # Wrong IDs first: Microsoft's text for AADSTS700016 also contains the word "consented".
+  if ("$code $text" -match 'AADSTS700016|AADSTS90002|AADSTS900023') {
+    return "במחשב שמורים מזהי אפליקציה או ארגון שלא קיימים אצל Microsoft (כנראה מזהים שהוזנו בניסיון קודם). לא צריך מזהים: מחזירים לברירת המחדל עם ms_configure ו-reset=true, ואז ms_sign_in. ($code)"
+  }
   if ("$code $text" -match 'AADSTS65001|AADSTS90094|AADSTS90008|consent|admin approval|admin_consent') {
     return "צריך אישור חד-פעמי של מנהל Microsoft 365 בארגון (לרוב איש המחשבים). הוא פותח את הקישור הזה, נכנס עם חשבון המנהל שלו ומאשר (Accept): $(Get-AdminConsentUrl) . אחר כך מפעילים ms_sign_in שוב. ($code)"
+  }
+  if ("$code $text" -match 'AADSTS50020|AADSTS500200|AADSTS50034|personal Microsoft account|MSA') {
+    return "נכנסת עם חשבון שלא שייך לארגון (למשל חשבון אישי של Microsoft עם אותה כתובת). להיכנס עם הכתובת שמופיעה ב-Outlook בתיבת הדואר, ואם נשאלים 'Work or school account' או 'Personal account', לבחור Work or school. ($code)"
   }
   if ("$code $text" -match 'AADSTS53003|Conditional Access') {
     return "מדיניות האבטחה של הארגון (Conditional Access) חוסמת את הכניסה. רק מנהל המערכת יכול לאפשר. ($code)"
@@ -119,10 +133,10 @@ function Get-AccessToken {
   $r = Invoke-Form "https://login.microsoftonline.com/$($cfg.tenant_id)/oauth2/v2.0/token" @{
     client_id = $cfg.client_id; grant_type = 'refresh_token'; refresh_token = $refresh; scope = (Get-Scopes $cfg)
   }
-  if (-not ($r.PSObject.Properties.Name -contains 'access_token')) {
-    throw ("SIGN_IN_EXPIRED: " + (Explain-AuthError $r.error $r.error_description) + " Run ms_sign_in again.")
+  if (-not ($null -ne $r.PSObject.Properties['access_token'])) {
+    throw ("SIGN_IN_EXPIRED: " + (Explain-AuthError (Get-Prop $r 'error' '') (Get-Prop $r 'error_description' '')) + " Run ms_sign_in again.")
   }
-  if ($r.PSObject.Properties.Name -contains 'refresh_token') { Save-RefreshToken $r.refresh_token }
+  if ($null -ne $r.PSObject.Properties['refresh_token']) { Save-RefreshToken $r.refresh_token }
   $script:AccessToken = $r.access_token
   $script:AccessExpires = [DateTime]::UtcNow.AddSeconds([int]$r.expires_in - 120)
   return $script:AccessToken
@@ -144,7 +158,11 @@ function Invoke-Graph($method, $path, $body = $null, $prefer = $null) {
 function Q($text) { return [Uri]::EscapeDataString($text) }
 
 function Get-Prop($obj, $name, $default = $null) {
-  if ($null -ne $obj -and ($obj.PSObject.Properties.Name -contains $name) -and $null -ne $obj.$name) { return $obj.$name }
+  # Properties[$name] instead of Properties.Name: on an object with no properties, .Name throws under strict mode.
+  if ($null -eq $obj) { return $default }
+  if ($obj -is [System.Collections.IDictionary]) { if ($obj.Contains($name) -and $null -ne $obj[$name]) { return $obj[$name] }; return $default }
+  $prop = $obj.PSObject.Properties[$name]
+  if ($null -ne $prop -and $null -ne $prop.Value) { return $prop.Value }
   return $default
 }
 
@@ -189,11 +207,20 @@ $Tools = @(
      description = 'Shows whether the Microsoft 365 connection is configured and signed in, and as whom. Call this first when mail, calendar or OneDrive is needed.'
      props = @{}; required = @() },
   @{ name = 'ms_configure'; title = 'הגדרת החיבור'; readOnly = $false
-     description = 'Optional settings. Not needed to connect: sign-in works without any IDs. allow_send enables sending mail (default false: drafts only). tenant_id and client_id only if the IT admin registered a dedicated app in Entra and wants it used.'
-     props = @{ tenant_id = @{ type = 'string' }; client_id = @{ type = 'string' }; allow_send = @{ type = 'boolean' } }; required = @() },
-  @{ name = 'ms_sign_in'; title = 'כניסה לחשבון Microsoft'; readOnly = $false
-     description = 'Starts sign-in. Returns a short code and a web address; tell the user to open the address, enter the code and sign in with his own Microsoft 365 account. Then call ms_sign_in_complete.'
+     description = 'Optional settings. Not needed to connect: sign-in works without any IDs. allow_send enables sending mail (default false: drafts only). reset=true deletes saved IDs and sign-in and returns to the default (no IDs); use it when sign-in fails with AADSTS700016 or after IDs were entered by mistake. tenant_id and client_id only if the IT admin registered a dedicated app in Entra and asked for it.'
+     props = @{ tenant_id = @{ type = 'string' }; client_id = @{ type = 'string' }; allow_send = @{ type = 'boolean' }; reset = @{ type = 'boolean' } }; required = @() },
+  @{ name = 'ms_check'; title = 'בדיקת החיבור ל-Microsoft'; readOnly = $true
+     description = 'Diagnoses this computer before or after sign-in: PowerShell version and language mode, execution policy, secure storage, access to Microsoft sign-in and Graph, and the sign-in state. Run it first when setting up or when anything fails.'
      props = @{}; required = @() },
+  @{ name = 'ms_admin_link'; title = 'קישור אישור למנהל'; readOnly = $true
+     description = 'Returns the one-time admin consent link for the IT administrator, with the app name and permissions, ready to forward. Use when the user asks for the link for his IT person or when sign-in needs admin approval.'
+     props = @{}; required = @() },
+  @{ name = 'ms_sign_out'; title = 'ניתוק מחשבון Microsoft'; readOnly = $false
+     description = 'Disconnects: deletes the stored sign-in from this computer. Use it immediately if ms_status shows someone other than the consultant (for example the IT admin who signed in to approve), then sign in again with the consultant own account.'
+     props = @{}; required = @() },
+  @{ name = 'ms_sign_in'; title = 'כניסה לחשבון Microsoft'; readOnly = $false
+     description = 'Starts sign-in. method "code" (default): returns a web address and a short code; the user opens it, enters the code and signs in with his own work account. method "browser": opens the sign-in page in the default browser and returns the address in case it did not open; use it when the code method is blocked or fails. Either way, then call ms_sign_in_complete.'
+     props = @{ method = @{ type = 'string'; enum = @('code', 'browser') } }; required = @() },
   @{ name = 'ms_sign_in_complete'; title = 'סיום כניסה'; readOnly = $false
      description = 'Waits (up to about 45 seconds) for the user to finish the sign-in started by ms_sign_in and stores the credentials securely on this computer.'
      props = @{}; required = @() },
@@ -246,13 +273,22 @@ function To-DateTime($text, $endOfDay) {
 
 function Tool-Status($a) {
   $cfg = Get-Config
-  if (-not (Test-Path $TokenPath)) { return 'עוד לא נכנסו לחשבון Microsoft. לא צריך מזהים: הצעד הבא הוא ms_sign_in.' }
+  $custom = ($cfg.client_id -ne $DefaultClient) -or ($cfg.tenant_id -ne $DefaultTenant)
+  $note = if ($custom) { " שים לב: שמורים במחשב מזהים (ארגון $($cfg.tenant_id), אפליקציה $($cfg.client_id)). אם איש המחשבים לא ביקש אותם במפורש, להחזיר לברירת המחדל: ms_configure עם reset=true." } else { '' }
+  if (-not (Test-Path $TokenPath)) { return "עוד לא נכנסו לחשבון Microsoft. לא צריך מזהים: הצעד הבא הוא ms_sign_in.$note" }
   $me = Invoke-Graph 'GET' '/me?$select=displayName,mail,userPrincipalName'
   $send = if ($cfg.allow_send) { 'מופעלת (רק עם אישור לכל מייל)' } else { 'כבויה: טיוטות בלבד' }
-  return "מחובר בשם $($me.displayName) ($($me.mail)). שליחת מייל: $send."
+  return "מחובר בשם $($me.displayName) ($($me.mail), כניסה: $($me.userPrincipalName)). שליחת מייל: $send. אם זה לא החשבון של בעל התיבה, להפעיל ms_sign_out ולהתחבר מחדש."
 }
 
 function Tool-Configure($a) {
+  if (Get-Prop $a 'reset' $false) {
+    $allowKeep = [bool](Get-Config).allow_send
+    Tool-SignOut $a | Out-Null
+    Remove-Item $ConfigPath -Force -ErrorAction SilentlyContinue
+    if ($allowKeep) { Save-Config $DefaultTenant $DefaultClient $true }
+    return 'חזר לברירת המחדל: אפליקציה ציבורית של Microsoft, בלי מזהים. הצעד הבא: ms_sign_in.'
+  }
   $cfg = Get-Config
   $tenant = Get-Prop $a 'tenant_id' $cfg.tenant_id
   $client = Get-Prop $a 'client_id' $cfg.client_id
@@ -269,10 +305,104 @@ function Tool-Configure($a) {
   return 'נשמר. הצעד הבא: ms_sign_in.'
 }
 
+function New-UrlSafeRandom([int]$bytes) {
+  $b = New-Object byte[] $bytes
+  $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+  $rng.GetBytes($b)
+  return [Convert]::ToBase64String($b).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+}
+
+function Stop-BrowserSignIn {
+  if ($script:Browser) { foreach ($l in $script:Browser.listeners) { try { $l.Stop() } catch {} } }
+  $script:Browser = $null
+}
+
+function Start-BrowserSignIn($cfg) {
+  Stop-BrowserSignIn
+  # Loopback redirect on 127.0.0.1 and ::1 only, so Windows Firewall never asks and nothing is reachable from outside.
+  $first = New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback, 0)
+  $first.Start()
+  $port = ([Net.IPEndPoint]$first.LocalEndpoint).Port
+  $listeners = @($first)
+  try { $v6 = New-Object Net.Sockets.TcpListener([Net.IPAddress]::IPv6Loopback, $port); $v6.Start(); $listeners += $v6 } catch {}
+  $verifier = New-UrlSafeRandom 48
+  $sha = [Security.Cryptography.SHA256]::Create()
+  $challenge = [Convert]::ToBase64String($sha.ComputeHash([Text.Encoding]::ASCII.GetBytes($verifier))).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+  $state = New-UrlSafeRandom 16
+  $redirect = "http://localhost:$port"
+  $url = "https://login.microsoftonline.com/$($cfg.tenant_id)/oauth2/v2.0/authorize?client_id=$($cfg.client_id)&response_type=code&redirect_uri=$(Q $redirect)&response_mode=query&scope=$(Q (Get-Scopes $cfg))&code_challenge=$challenge&code_challenge_method=S256&state=$state&prompt=select_account"
+  $script:Browser = @{ listeners = $listeners; verifier = $verifier; state = $state; redirect = $redirect; expires = [DateTime]::UtcNow.AddMinutes(10) }
+  $opened = $true
+  if ($env:CONSULTING_OFFICE_NO_BROWSER) { $opened = $false } else { try { Start-Process $url } catch { $opened = $false } }
+  $lead = if ($opened) { 'נפתח דף כניסה בדפדפן.' } else { 'הדפדפן לא נפתח לבד.' }
+  return "$lead אם הוא לא מופיע, פותחים את הכתובת הזו:`n$url`nנכנסים עם החשבון של Microsoft 365, ומאשרים אם מופיע מסך הרשאות. אחר כך מפעילים ms_sign_in_complete."
+}
+
+function Read-BrowserReply($client) {
+  $stream = $client.GetStream()
+  $stream.ReadTimeout = 5000
+  $reader = New-Object IO.StreamReader($stream, [Text.Encoding]::ASCII)
+  $first = $reader.ReadLine()
+  $query = @{}
+  if ($first -match '^GET\s+(\S+)') {
+    $target = $Matches[1]
+    $qs = if ($target.Contains('?')) { $target.Substring($target.IndexOf('?') + 1) } else { '' }
+    foreach ($pair in ($qs -split '&')) {
+      if (-not $pair) { continue }
+      $kv = $pair -split '=', 2
+      $val = if ($kv.Count -gt 1) { [Uri]::UnescapeDataString($kv[1].Replace('+', ' ')) } else { '' }
+      $query[[Uri]::UnescapeDataString($kv[0])] = $val
+    }
+  }
+  $isAnswer = $query.ContainsKey('code') -or $query.ContainsKey('error')
+  $html = if ($query.ContainsKey('code')) { 'הכניסה הצליחה. אפשר לסגור את החלון ולחזור לעוזר.' } elseif ($query.ContainsKey('error')) { 'הכניסה לא הושלמה. אפשר לסגור את החלון ולחזור לעוזר.' } else { '' }
+  $body = $Utf8.GetBytes("<!doctype html><html dir=`"rtl`" lang=`"he`"><meta charset=`"utf-8`"><body style=`"font-family:sans-serif;padding:40px;font-size:20px`">$html</body></html>")
+  $status = if ($isAnswer) { '200 OK' } else { '404 Not Found' }
+  $head = [Text.Encoding]::ASCII.GetBytes("HTTP/1.1 $status`r`nContent-Type: text/html; charset=utf-8`r`nContent-Length: $($body.Length)`r`nConnection: close`r`n`r`n")
+  try { $stream.Write($head, 0, $head.Length); $stream.Write($body, 0, $body.Length); $stream.Flush() } catch {}
+  $client.Close()
+  if ($isAnswer) { return $query }
+  return $null
+}
+
+function Complete-BrowserSignIn($cfg) {
+  $b = $script:Browser
+  if ([DateTime]::UtcNow -gt $b.expires) { Stop-BrowserSignIn; throw 'זמן הכניסה עבר. הפעל ms_sign_in שוב.' }
+  $deadline = [DateTime]::UtcNow.AddSeconds(45)
+  while ([DateTime]::UtcNow -lt $deadline) {
+    foreach ($l in $b.listeners) {
+      if (-not $l.Pending()) { continue }
+      $reply = $null
+      try { $reply = Read-BrowserReply ($l.AcceptTcpClient()) } catch { Log "browser reply: $($_.Exception.Message)" }
+      if ($null -eq $reply) { continue }
+      if ($reply.ContainsKey('error')) { Stop-BrowserSignIn; throw ("הכניסה נכשלה: " + (Explain-AuthError $reply['error'] $reply['error_description'])) }
+      if ($reply['state'] -ne $b.state) { Stop-BrowserSignIn; throw 'הכניסה נכשלה: תשובה לא תואמת מהדפדפן. הפעל ms_sign_in שוב.' }
+      $r = Invoke-Form "https://login.microsoftonline.com/$($cfg.tenant_id)/oauth2/v2.0/token" @{
+        client_id = $cfg.client_id; grant_type = 'authorization_code'; code = $reply['code']; redirect_uri = $b.redirect
+        code_verifier = $b.verifier; scope = (Get-Scopes $cfg)
+      }
+      Stop-BrowserSignIn
+      if (-not ($null -ne $r.PSObject.Properties['access_token'])) { throw ("הכניסה נכשלה: " + (Explain-AuthError (Get-Prop $r 'error' '') (Get-Prop $r 'error_description' ''))) }
+      return $r
+    }
+    Start-Sleep -Milliseconds 500
+  }
+  return $null
+}
+
+function Save-SignIn($r) {
+  Save-RefreshToken $r.refresh_token
+  $script:AccessToken = $r.access_token
+  $script:AccessExpires = [DateTime]::UtcNow.AddSeconds([int]$r.expires_in - 120)
+}
+
 function Tool-SignIn($a) {
   $cfg = Get-Config
+  Remove-Item $PendingPath -Force -ErrorAction SilentlyContinue
+  if ((Get-Prop $a 'method' 'code') -eq 'browser') { return (Start-BrowserSignIn $cfg) }
+  Stop-BrowserSignIn
   $r = Invoke-Form "https://login.microsoftonline.com/$($cfg.tenant_id)/oauth2/v2.0/devicecode" @{ client_id = $cfg.client_id; scope = (Get-Scopes $cfg) }
-  if (-not ($r.PSObject.Properties.Name -contains 'device_code')) { throw ("הכניסה לא התחילה: " + (Explain-AuthError $r.error $r.error_description)) }
+  if (-not ($null -ne $r.PSObject.Properties['device_code'])) { throw ("הכניסה לא התחילה: " + (Explain-AuthError (Get-Prop $r 'error' '') (Get-Prop $r 'error_description' '')) + " אפשר לנסות ms_sign_in עם method=browser.") }
   $pending = [ordered]@{ device_code = $r.device_code; interval = [int]$r.interval; expires = [DateTime]::UtcNow.AddSeconds([int]$r.expires_in).ToString('o') }
   New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
   [IO.File]::WriteAllText($PendingPath, ($pending | ConvertTo-Json), $Utf8)
@@ -281,6 +411,12 @@ function Tool-SignIn($a) {
 
 function Tool-SignInComplete($a) {
   $cfg = Get-Config
+  if ($script:Browser) {
+    $r = Complete-BrowserSignIn $cfg
+    if ($null -eq $r) { return 'הכניסה עוד לא הושלמה. אחרי שמסיימים בדפדפן, הפעל ms_sign_in_complete שוב.' }
+    Save-SignIn $r
+    return (Tool-Status $a)
+  }
   if (-not (Test-Path $PendingPath)) { throw 'אין כניסה פתוחה. הפעל ms_sign_in קודם.' }
   $p = Get-Content -Raw -Encoding UTF8 $PendingPath | ConvertFrom-Json
   # Stay under the host's per-tool timeout; the skill simply calls again if sign-in is still pending.
@@ -290,20 +426,64 @@ function Tool-SignInComplete($a) {
     $r = Invoke-Form "https://login.microsoftonline.com/$($cfg.tenant_id)/oauth2/v2.0/token" @{
       client_id = $cfg.client_id; grant_type = 'urn:ietf:params:oauth:grant-type:device_code'; device_code = $p.device_code
     }
-    if ($r.PSObject.Properties.Name -contains 'access_token') {
-      Save-RefreshToken $r.refresh_token
+    if ($null -ne $r.PSObject.Properties['access_token']) {
       Remove-Item $PendingPath -Force
-      $script:AccessToken = $r.access_token
-      $script:AccessExpires = [DateTime]::UtcNow.AddSeconds([int]$r.expires_in - 120)
+      Save-SignIn $r
       return (Tool-Status $a)
     }
-    switch ($r.error) {
+    switch (Get-Prop $r 'error' '') {
       'authorization_pending' { Start-Sleep -Seconds $interval }
       'slow_down' { $interval += 5; Start-Sleep -Seconds $interval }
-      default { Remove-Item $PendingPath -Force -ErrorAction SilentlyContinue; throw ("הכניסה נכשלה: " + (Explain-AuthError $r.error $r.error_description)) }
+      default { Remove-Item $PendingPath -Force -ErrorAction SilentlyContinue; throw ("הכניסה נכשלה: " + (Explain-AuthError (Get-Prop $r 'error' '') (Get-Prop $r 'error_description' '')) + " אפשר לנסות ms_sign_in עם method=browser.") }
     }
   }
   return 'הכניסה עוד לא הושלמה. אחרי שמסיימים בדפדפן, הפעל ms_sign_in_complete שוב.'
+}
+
+function Tool-SignOut($a) {
+  Stop-BrowserSignIn
+  Remove-Item $TokenPath -Force -ErrorAction SilentlyContinue
+  Remove-Item $PendingPath -Force -ErrorAction SilentlyContinue
+  $script:AccessToken = $null
+  $script:AccessExpires = [DateTime]::MinValue
+  return 'נותק. הכניסה השמורה נמחקה מהמחשב. להתחברות מחדש: ms_sign_in.'
+}
+
+function Tool-AdminLink($a) {
+  $perUser = @'
+Connect-MgGraph -Scopes "Application.ReadWrite.All","DelegatedPermissionGrant.ReadWrite.All","User.Read.All"
+$app = Get-MgServicePrincipal -Filter "appId eq '14d82eec-204b-4c2f-b7e8-296a70dab67e'"
+if (-not $app) { $app = New-MgServicePrincipal -AppId '14d82eec-204b-4c2f-b7e8-296a70dab67e' }
+$graph = Get-MgServicePrincipal -Filter "appId eq '00000003-0000-0000-c000-000000000000'"
+$user = Get-MgUser -UserId '<the address the user signs in to Outlook with>'
+New-MgOauth2PermissionGrant -BodyParameter @{ clientId = $app.Id; consentType = 'Principal'; principalId = $user.Id; resourceId = $graph.Id; scope = 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite Files.Read.All' }
+'@
+  return "האפליקציה: Microsoft Graph Command Line Tools ($DefaultClient)`nההרשאות (delegated): User.Read, Mail.ReadWrite, Mail.Send, Calendars.ReadWrite, Files.Read.All`nהחשבון: זה שהמשתמש נכנס איתו ל-Outlook (כתובת הכניסה). כתובת השולח העסקית היא בדרך כלל כתובת של אותה תיבה.`n`nאפשרות א, לכל הארגון: המנהל פותח את הקישור, נכנס עם חשבון מנהל ולוחץ Accept (דף ריק אחרי האישור תקין):`n$(Get-AdminConsentUrl)`n`nאפשרות ב, רק לחשבון אחד (Microsoft Graph PowerShell, מנהל):`n" + $perUser
+}
+
+function Tool-Check($a) {
+  $lines = @()
+  $lines += "PowerShell $($PSVersionTable.PSVersion) · מצב שפה: $($ExecutionContext.SessionState.LanguageMode)"
+  try { $pol = (Get-ExecutionPolicy -List | Where-Object { $_.ExecutionPolicy -ne 'Undefined' } | ForEach-Object { "$($_.Scope)=$($_.ExecutionPolicy)" }) -join ', '; $lines += "מדיניות הרצה: $pol" } catch { $lines += 'מדיניות הרצה: לא ידוע' }
+  try {
+    New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
+    $probe = ConvertTo-SecureString -String 'probe' -AsPlainText -Force | ConvertFrom-SecureString
+    $back = $probe | ConvertTo-SecureString
+    $lines += "שמירה מוצפנת: תקין ($DataDir)"
+  } catch { $lines += "שמירה מוצפנת: נכשל: $($_.Exception.Message)" }
+  foreach ($t in @(@('כניסה של Microsoft', 'https://login.microsoftonline.com/organizations/v2.0/.well-known/openid-configuration'), @('Microsoft Graph', 'https://graph.microsoft.com/v1.0/$metadata'))) {
+    try { Invoke-WebRequest -Uri $t[1] -UseBasicParsing -TimeoutSec 15 -Method Head | Out-Null; $lines += "$($t[0]): נגיש" }
+    catch {
+      $code = $null
+      try { $code = [int]$_.Exception.Response.StatusCode } catch {}
+      if ($code) { $lines += "$($t[0]): נגיש (HTTP $code)" } else { $lines += "$($t[0]): לא נגיש: $($_.Exception.Message)" }
+    }
+  }
+  $cfg = Get-Config
+  $mode = if ((Get-Prop $cfg 'default' $false) -or $cfg.client_id -eq $DefaultClient) { 'אפליקציה ציבורית של Microsoft, בלי מזהים' } else { "אפליקציה ייעודית ($($cfg.client_id))" }
+  $lines += "חיבור: $mode · שליחה: $(if ($cfg.allow_send) { 'מופעלת' } else { 'טיוטות בלבד' })"
+  try { $lines += "מצב: $(Tool-Status $a)" } catch { $lines += "מצב: $($_.Exception.Message)" }
+  return ($lines -join "`n")
 }
 
 function Tool-MailSearch($a) {
@@ -348,7 +528,7 @@ function Tool-MailAttachments($a) {
 function Tool-MailSaveAttachment($a) {
   if (-not (Test-Path -LiteralPath $a.folder -PathType Container)) { throw "התיקייה לא קיימת: $($a.folder)" }
   $att = Invoke-Graph 'GET' "/me/messages/$($a.message_id)/attachments/$($a.attachment_id)"
-  if (-not ($att.PSObject.Properties.Name -contains 'contentBytes')) { throw 'זה לא קובץ מצורף רגיל (למשל פריט Outlook מקושר) ולא ניתן לשמור אותו.' }
+  if (-not ($null -ne $att.PSObject.Properties['contentBytes'])) { throw 'זה לא קובץ מצורף רגיל (למשל פריט Outlook מקושר) ולא ניתן לשמור אותו.' }
   $name = ($att.name -replace '[\\/:*?"<>|]', '_')
   $target = Join-Path $a.folder $name
   $i = 2
@@ -467,7 +647,7 @@ function Tool-OneDriveList($a) {
 }
 
 $Handlers = @{
-  ms_status = ${function:Tool-Status}; ms_configure = ${function:Tool-Configure}
+  ms_status = ${function:Tool-Status}; ms_configure = ${function:Tool-Configure}; ms_check = ${function:Tool-Check}; ms_admin_link = ${function:Tool-AdminLink}; ms_sign_out = ${function:Tool-SignOut}
   ms_sign_in = ${function:Tool-SignIn}; ms_sign_in_complete = ${function:Tool-SignInComplete}
   mail_search = ${function:Tool-MailSearch}; mail_read = ${function:Tool-MailRead}
   mail_attachments = ${function:Tool-MailAttachments}; mail_save_attachment = ${function:Tool-MailSaveAttachment}
@@ -481,8 +661,7 @@ $Handlers = @{
 # ---------- MCP over stdio ----------
 
 function Send-Message($obj) {
-  [Console]::Out.WriteLine((ConvertTo-Json -InputObject $obj -Depth 30 -Compress))
-  [Console]::Out.Flush()
+  $StdOut.WriteLine((ConvertTo-Json -InputObject $obj -Depth 30 -Compress))
 }
 
 function Tool-List {
@@ -500,11 +679,11 @@ function Tool-List {
 
 Log "starting $ServerVersion"
 while ($true) {
-  $line = [Console]::In.ReadLine()
+  $line = $StdIn.ReadLine()
   if ($null -eq $line) { break }
   if (-not $line.Trim()) { continue }
   try { $msg = $line | ConvertFrom-Json } catch { Log "bad json: $line"; continue }
-  $hasId = $msg.PSObject.Properties.Name -contains 'id'
+  $hasId = $null -ne $msg.PSObject.Properties['id']
   try {
     switch ($msg.method) {
       'initialize' {

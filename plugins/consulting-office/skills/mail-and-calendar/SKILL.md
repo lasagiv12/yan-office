@@ -1,6 +1,6 @@
 ---
 name: mail-and-calendar
-description: Works with the consultant's Outlook mail, calendar and OneDrive through the Microsoft 365 connection - finds client emails, writes reply drafts in Outlook, sends only when allowed and approved, checks availability, schedules, moves or cancels meetings, and saves email attachments into the client folder. Also handles first-time connection setup. Use for "מה המיילים האחרונים מ...", "תענה למייל של...", "תכין טיוטה", "מתי אני פנוי", "מה יש לי ביומן", "תקבע פגישה עם...", "תזיז את הפגישה", "תבטל את הפגישה", "תשמור את הקובץ מהמייל בתיק", "חבר את Microsoft", "התחברות ל-Outlook".
+description: Works with the consultant's Outlook mail, calendar and OneDrive through the Microsoft 365 connection - finds client emails, writes reply drafts in Outlook, sends only when allowed and approved, checks availability, schedules, moves or cancels meetings, and saves email attachments into the client folder. Also handles first-time connection setup. Use for "מה המיילים האחרונים מ...", "תענה למייל של...", "תכין טיוטה", "מתי אני פנוי", "מה יש לי ביומן", "תקבע פגישה עם...", "תזיז את הפגישה", "תבטל את הפגישה", "תשמור את הקובץ מהמייל בתיק", "חבר את Microsoft", "התחברות ל-Outlook", "קישור לאיש המחשבים".
 ---
 
 # מייל, יומן ו-OneDrive
@@ -16,14 +16,28 @@ description: Works with the consultant's Outlook mail, calendar and OneDrive thr
 - **אין כלים כאלה בכלל** (החיבור לא מותקן בגרסה הזו או במחשב הזה): משתמשים בחיבור המובנה ל-Outlook אם יש, לקריאה בלבד. אומרים מה לא אפשרי. לא מאלתרים.
 
 ## התחברות ראשונה (פעם אחת)
-1. **שליחת מייל:** שואלים "לאפשר לעוזר לשלוח מיילים אחרי אישור שלך, או רק להכין טיוטות?". ברירת המחדל היא טיוטות בלבד. אם בוחרים שליחה: `ms_configure` עם `allow_send=true`.
-2. `ms_sign_in`. מסבירים בשורה אחת: פותחים את הכתובת, מזינים את הקוד, ומתחברים עם החשבון העסקי. אם מופיע מסך הרשאות, מאשרים.
-3. `ms_sign_in_complete`. אם התשובה "עוד לא הושלמה", מפעילים שוב אחרי שמסיימים בדפדפן.
-4. בדיקה: "מה יש לי ביומן השבוע?".
+1. **בדיקה:** `ms_check`. אם משהו בה נכשל, אומרים מה בשורה אחת, ולא ממשיכים לכניסה. מצב שפה שאינו FullLanguage, או מדיניות הרצה AllSigned או Restricted, הם הגבלה של הארגון על המחשב, וצריך את איש המחשבים.
+2. **שליחת מייל:** שואלים "לאפשר לעוזר לשלוח מיילים אחרי אישור שלך, או רק להכין טיוטות?". ברירת המחדל היא טיוטות בלבד. אם בוחרים שליחה: `ms_configure` עם `allow_send=true`.
+3. `ms_sign_in`. מסבירים בשורה אחת: פותחים את הכתובת, מזינים את הקוד, ונכנסים עם **הכתובת שמופיעה בתיבת הדואר ב-Outlook**. אם נשאלים "Work or school" או "Personal", בוחרים Work or school. אם מופיע מסך הרשאות, מאשרים.
+   אחרי החיבור, `ms_status` מציג את כתובת המייל של התיבה. אומרים אותה ליאן, כדי שיוודא שזו התיבה שהוא עובד בה.
+   **אם מופיע שם של מישהו אחר** (למשל איש המחשבים שנכנס כדי לאשר): מיד `ms_sign_out`, ואז מתחברים שוב עם החשבון של יאן. אסור לעבוד על תיבה של מישהו אחר.
+4. `ms_sign_in_complete`. אם התשובה "עוד לא הושלמה", מפעילים שוב אחרי שמסיימים בדפדפן.
+5. **אם הכניסה בקוד נכשלה או נחסמה** (חוץ מ"צריך אישור מנהל"): מנסים שוב עם `ms_sign_in` ו-`method=browser`. נפתח דף כניסה רגיל בדפדפן, בלי קוד. אחר כך `ms_sign_in_complete`.
+6. בדיקה: "מה יש לי ביומן השבוע?".
+
+**מזהים שנשמרו בטעות:** אם `ms_status` מציין שיש במחשב מזהים שמורים, או שהכניסה נכשלת עם AADSTS700016 ("Application ... was not found in the directory"), מפעילים מיד `ms_configure` עם `reset=true` ומתחילים כניסה מחדש. לא שואלים את יאן על מזהים.
 
 **לא צריך מזהים.** `tenant_id` ו-`client_id` נשלחים ל-`ms_configure` רק אם יאן או איש המחשבים שלו נתנו אותם ביוזמתם, מאפליקציה שרשמו ב-Entra.
 
-**"צריך אישור של מנהל" (Need admin approval, admin consent):** החשבון של יאן לא מורשה לאשר בעצמו גישה למייל וליומן. גם בעל העסק לא תמיד מנהל את Microsoft 365, ולעיתים זה איש המחשבים. בהודעת השגיאה יש קישור אישור. מנסחים בשבילו הודעה קצרה לאיש המחשבים, עם הקישור כמו שהוא: "אפשר לפתוח את הקישור, להיכנס עם חשבון המנהל ולאשר? זה מאשר לעוזר לעבוד בשמי על המייל, היומן וה-OneDrive שלי. האישור הוא פעם אחת. <הקישור>". אחרי האישור חוזרים ל-`ms_sign_in`. עד אז עובדים עם החיבור המובנה ל-Outlook, אם יש, ומדגישים שהוא לקריאה בלבד.
+**"תן לי את הקישור לאיש המחשבים":** `ms_admin_link`, ומנסחים מסביב לו הודעה קצרה מוכנה להעברה (ראו למטה). אפשר לבקש את זה גם לפני שמנסים להתחבר.
+
+**"צריך אישור של מנהל" (Need admin approval):** החשבון של יאן לא מורשה לאשר בעצמו גישה למייל וליומן. גם בעל העסק לא תמיד מנהל את Microsoft 365. **הדרך הרגילה, עם איש המחשבים ליד המחשב או בשליטה מרחוק:**
+1. מתחילים כניסה בקוד (`ms_sign_in`). את כתובת הכניסה פותחים **בחלון גלישה בסתר** (InPrivate), כדי שפרטי המנהל לא יישארו בדפדפן של יאן.
+2. יאן נכנס עם החשבון שלו. מופיע "Need admin approval".
+3. איש המחשבים לוחץ על "Have an admin account? Sign in with that account", נכנס עם חשבון המנהל, מסמן **Consent on behalf of your organization**, ולוחץ Accept.
+4. `ms_sign_in_complete`, ואז `ms_status`. כנראה יופיע שם המנהל: מיד `ms_sign_out`, סוגרים את החלון בסתר, ומתחברים שוב (`ms_sign_in`, חלון בסתר חדש) עם החשבון של יאן. הפעם הכניסה עוברת בלי שאלות.
+
+אם איש המחשבים לא ליד המחשב: `ms_admin_link`, ומנסחים לו הודעה קצרה עם הקישור, או עם הפקודה לאישור לחשבון אחד. עד האישור עובדים עם החיבור המובנה ל-Outlook, אם יש, ומדגישים שהוא לקריאה בלבד.
 
 ## מייל
 - **מיילים של לקוח:** לוקחים את הכתובות והדומיינים מ-`tblClients` באינדקס, ומחפשים ב-`mail_search` עם `from` לכל אחד. אם הדומיין משותף לכולם (gmail, outlook), מחפשים לפי הכתובת המלאה.
