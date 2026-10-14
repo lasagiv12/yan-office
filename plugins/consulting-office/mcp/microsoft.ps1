@@ -21,18 +21,31 @@ $StdOut.AutoFlush = $true
 # Windows PowerShell 5.1 can serialize arrays as {"value":[...],"Count":n} because of this type data.
 Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue
 
-$ServerVersion = '0.5.0'
+$ServerVersion = '0.5.3'
 $TimeZone = 'Israel Standard Time'
 $Graph = 'https://graph.microsoft.com/v1.0'
 $DataDir = Join-Path $env:APPDATA 'ConsultingOffice'
 $ConfigPath = Join-Path $DataDir 'microsoft.json'
 $TokenPath = Join-Path $DataDir 'microsoft-token.dat'
 $PendingPath = Join-Path $DataDir 'microsoft-pending.json'
+$LogPath = Join-Path $DataDir 'microsoft-log.txt'
 $script:AccessToken = $null
 $script:AccessExpires = [DateTime]::MinValue
 $script:Browser = $null
 
 function Log($text) { [Console]::Error.WriteLine("[microsoft] $text") }
+
+# Sign-in history (never tokens), so ms_check can show why and when the connection asked to sign in again.
+function Write-AuthLog($text) {
+  try {
+    New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
+    $lines = @()
+    if (Test-Path $LogPath) { $lines = @(Get-Content -Encoding UTF8 $LogPath | Select-Object -Last 39) }
+    $text = "$text"; if ($text.Length -gt 300) { $text = $text.Substring(0, 300) }
+    $lines += "$((Get-Date).ToString('dd/MM/yyyy HH:mm')) $text"
+    [IO.File]::WriteAllLines($LogPath, [string[]]$lines, $Utf8)
+  } catch {}
+}
 
 # ---------- config and secure storage ----------
 
@@ -60,6 +73,16 @@ function Explain-AuthError($code, $text) {
   # Wrong IDs first: Microsoft's text for AADSTS700016 also contains the word "consented".
   if ("$code $text" -match 'AADSTS700016|AADSTS90002|AADSTS900023') {
     return "במחשב שמורים מזהי אפליקציה או ארגון שלא קיימים אצל Microsoft (כנראה מזהים שהוזנו בניסיון קודם). לא צריך מזהים: מחזירים לברירת המחדל עם ms_configure ו-reset=true, ואז ms_sign_in. ($code)"
+  }
+  # Expired sign-ins, before the consent and Conditional Access checks: their texts mention both.
+  if ("$code $text" -match 'AADSTS70043|AADSTS70044|AADSTS50078|AADSTS50076|AADSTS50079') {
+    return "מדיניות האבטחה של הארגון מחייבת להיכנס מחדש כל פרק זמן קבוע (Sign-in frequency או אימות דו-שלבי חוזר). זה יחזור על עצמו עד שאיש המחשבים יאריך את התקופה או יחריג את האפליקציה Microsoft Graph Command Line Tools. ($code)"
+  }
+  if ("$code $text" -match 'AADSTS50173|AADSTS50133|AADSTS50089') {
+    return "הסיסמה של החשבון הוחלפה, או שהחשבון נותק מכל המכשירים. צריך להיכנס שוב פעם אחת, והחיבור יישאר. ($code)"
+  }
+  if ("$code $text" -match 'AADSTS700082|AADSTS700081') {
+    return "לא השתמשו בחיבור יותר מ-90 יום, ולכן הכניסה פגה. צריך להיכנס שוב פעם אחת. ($code)"
   }
   if ("$code $text" -match 'AADSTS65001|AADSTS90094|AADSTS90008|consent|admin approval|admin_consent') {
     return "צריך אישור חד-פעמי של מנהל Microsoft 365 בארגון (לרוב איש המחשבים). הוא פותח את הקישור הזה, נכנס עם חשבון המנהל שלו ומאשר (Accept): $(Get-AdminConsentUrl) . אחר כך מפעילים ms_sign_in שוב. ($code)"
@@ -130,11 +153,23 @@ function Get-AccessToken {
   $cfg = Get-Config
   $refresh = Get-RefreshToken
   if (-not $refresh) { throw 'NOT_SIGNED_IN: run ms_sign_in, then ms_sign_in_complete.' }
-  $r = Invoke-Form "https://login.microsoftonline.com/$($cfg.tenant_id)/oauth2/v2.0/token" @{
-    client_id = $cfg.client_id; grant_type = 'refresh_token'; refresh_token = $refresh; scope = (Get-Scopes $cfg)
+  $temporary = 'TEMPORARY: אין כרגע תשובה תקינה משרתי הכניסה של Microsoft (רשת או תקלה זמנית). הכניסה השמורה בסדר, לא צריך להתחבר שוב. לנסות שוב בעוד דקה.'
+  try {
+    $r = Invoke-Form "https://login.microsoftonline.com/$($cfg.tenant_id)/oauth2/v2.0/token" @{
+      client_id = $cfg.client_id; grant_type = 'refresh_token'; refresh_token = $refresh; scope = (Get-Scopes $cfg)
+    }
+  } catch {
+    # No answer from Microsoft (network, proxy, outage): the stored sign-in is still valid.
+    Write-AuthLog "תקלה זמנית בחידוש הכניסה: $($_.Exception.Message)"
+    throw $temporary
   }
-  if (-not ($null -ne $r.PSObject.Properties['access_token'])) {
-    throw ("SIGN_IN_EXPIRED: " + (Explain-AuthError (Get-Prop $r 'error' '') (Get-Prop $r 'error_description' '')) + " Run ms_sign_in again.")
+  if ($null -eq $r -or $null -eq $r.PSObject.Properties['access_token']) {
+    $code = Get-Prop $r 'error' ''
+    $desc = Get-Prop $r 'error_description' ''
+    if ($code -in @('temporarily_unavailable', 'server_error', '')) { Write-AuthLog "תקלה זמנית בחידוש הכניסה: $code"; throw $temporary }
+    $aad = if ("$desc" -match 'AADSTS\d+') { $Matches[0] } else { $code }
+    Write-AuthLog "הכניסה פגה ($aad)"
+    throw ("SIGN_IN_EXPIRED: " + (Explain-AuthError $code $desc) + " Run ms_sign_in again.")
   }
   if ($null -ne $r.PSObject.Properties['refresh_token']) { Save-RefreshToken $r.refresh_token }
   $script:AccessToken = $r.access_token
@@ -142,9 +177,11 @@ function Get-AccessToken {
   return $script:AccessToken
 }
 
-function Invoke-Graph($method, $path, $body = $null, $prefer = $null) {
+function Invoke-Graph($method, $path, $body = $null, $Prefer = $null, [switch]$Retried) {
+  # Pass the Prefer header by name (-Prefer): positionally it lands in $body, and Windows PowerShell refuses a body on GET.
+  if ($null -ne $body -and $method -in @('GET', 'DELETE')) { throw "Invoke-Graph: $method $path cannot carry a body" }
   $headers = @{ Authorization = "Bearer $(Get-AccessToken)" }
-  if ($prefer) { $headers['Prefer'] = $prefer }
+  if ($Prefer) { $headers['Prefer'] = $Prefer }
   $url = if ($path.StartsWith('https://')) { $path } else { "$Graph$path" }
   $req = @{ Method = $method; Uri = $url; Headers = $headers; UseBasicParsing = $true }
   if ($null -ne $body) {
@@ -152,7 +189,17 @@ function Invoke-Graph($method, $path, $body = $null, $prefer = $null) {
     $req['ContentType'] = 'application/json; charset=utf-8'
   }
   try { return Invoke-RestMethod @req }
-  catch { throw "Graph $method $path failed: $(Read-ErrorBody $_)" }
+  catch {
+    $err = $_
+    $status = 0
+    try { $status = [int]$err.Exception.Response.StatusCode } catch {}
+    # Graph rejected the access token before its expiry (revoked or policy change): renew it once.
+    if ($status -eq 401 -and -not $Retried) {
+      $script:AccessToken = $null
+      return (Invoke-Graph $method $path $body $Prefer -Retried)
+    }
+    throw "Graph $method $path failed: $(Read-ErrorBody $err)"
+  }
 }
 
 function Q($text) { return [Uri]::EscapeDataString($text) }
@@ -237,8 +284,11 @@ $Tools = @(
      description = 'Saves one attachment to a local folder (for example the client''s 07 לתיוק folder). Never overwrites: adds a number if the name exists.'
      props = @{ message_id = @{ type = 'string' }; attachment_id = @{ type = 'string' }; folder = @{ type = 'string' } }; required = @('message_id', 'attachment_id', 'folder') },
   @{ name = 'mail_create_draft'; title = 'טיוטת מייל'; readOnly = $false
-     description = 'Creates a draft in the user''s Outlook Drafts folder (nothing is sent). For a reply pass reply_to_message_id; the text is placed above the quoted message. Body is plain text; Hebrew is fine.'
+     description = 'Creates a draft in the user''s Outlook Drafts folder (nothing is sent). This is the default for any request to write an email. For a reply pass reply_to_message_id; the text is placed above the quoted message. Body is plain text; Hebrew is fine. To change it afterwards use mail_update_draft, not a second draft.'
      props = @{ to = @{ type = 'array'; items = @{ type = 'string' } }; cc = @{ type = 'array'; items = @{ type = 'string' } }; subject = @{ type = 'string' }; body = @{ type = 'string' }; reply_to_message_id = @{ type = 'string' } }; required = @('body') },
+  @{ name = 'mail_update_draft'; title = 'עדכון טיוטה'; readOnly = $false
+     description = 'Changes a draft created earlier (subject, recipients, or the text; a reply keeps its quoted message). Use it for corrections instead of creating another draft. Nothing is sent.'
+     props = @{ draft_id = @{ type = 'string' }; to = @{ type = 'array'; items = @{ type = 'string' } }; cc = @{ type = 'array'; items = @{ type = 'string' } }; subject = @{ type = 'string' }; body = @{ type = 'string' } }; required = @('draft_id') },
   @{ name = 'mail_send_draft'; title = 'שליחת טיוטה'; readOnly = $false; destructive = $true
      description = 'Sends an existing draft. Works only if sending was enabled in ms_configure (allow_send) and only with confirmed=true after the user approved sending this exact draft.'
      props = @{ draft_id = @{ type = 'string' }; confirmed = @{ type = 'boolean' } }; required = @('draft_id', 'confirmed') },
@@ -300,7 +350,7 @@ function Tool-Configure($a) {
   $allow = Get-Prop $a 'allow_send' $cfg.allow_send
   $changed = ($tenant -ne $cfg.tenant_id) -or ($client -ne $cfg.client_id) -or ([bool]$allow -ne [bool]$cfg.allow_send)
   Save-Config $tenant $client $allow
-  if ($changed -and (Test-Path $TokenPath)) { Remove-Item $TokenPath -Force; $script:AccessToken = $null; return 'נשמר. צריך להיכנס שוב: ms_sign_in.' }
+  if ($changed -and (Test-Path $TokenPath)) { Remove-Item $TokenPath -Force; $script:AccessToken = $null; Write-AuthLog 'ההגדרות שונו, נדרשת כניסה מחדש'; return 'נשמר. צריך להיכנס שוב: ms_sign_in.' }
   if (Test-Path $TokenPath) { return 'נשמר.' }
   return 'נשמר. הצעד הבא: ms_sign_in.'
 }
@@ -392,6 +442,7 @@ function Complete-BrowserSignIn($cfg) {
 
 function Save-SignIn($r) {
   Save-RefreshToken $r.refresh_token
+  Write-AuthLog 'נכנס לחשבון'
   $script:AccessToken = $r.access_token
   $script:AccessExpires = [DateTime]::UtcNow.AddSeconds([int]$r.expires_in - 120)
 }
@@ -442,6 +493,7 @@ function Tool-SignInComplete($a) {
 
 function Tool-SignOut($a) {
   Stop-BrowserSignIn
+  if (Test-Path $TokenPath) { Write-AuthLog 'נותק (ms_sign_out)' }
   Remove-Item $TokenPath -Force -ErrorAction SilentlyContinue
   Remove-Item $PendingPath -Force -ErrorAction SilentlyContinue
   $script:AccessToken = $null
@@ -483,6 +535,7 @@ function Tool-Check($a) {
   $mode = if ((Get-Prop $cfg 'default' $false) -or $cfg.client_id -eq $DefaultClient) { 'אפליקציה ציבורית של Microsoft, בלי מזהים' } else { "אפליקציה ייעודית ($($cfg.client_id))" }
   $lines += "חיבור: $mode · שליחה: $(if ($cfg.allow_send) { 'מופעלת' } else { 'טיוטות בלבד' })"
   try { $lines += "מצב: $(Tool-Status $a)" } catch { $lines += "מצב: $($_.Exception.Message)" }
+  if (Test-Path $LogPath) { $lines += 'יומן חיבור (אחרונים):'; $lines += @(Get-Content -Encoding UTF8 $LogPath | Select-Object -Last 10) }
   return ($lines -join "`n")
 }
 
@@ -513,7 +566,7 @@ function Tool-MailSearch($a) {
 }
 
 function Tool-MailRead($a) {
-  $m = Invoke-Graph 'GET' "/me/messages/$($a.message_id)?`$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,body,hasAttachments,webLink" 'outlook.body-content-type="text"'
+  $m = Invoke-Graph 'GET' "/me/messages/$($a.message_id)?`$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,body,hasAttachments,webLink" -Prefer 'outlook.body-content-type="text"'
   $out = Format-Message $m
   $out['cc'] = @($m.ccRecipients | ForEach-Object { Format-Address $_ })
   $out['body'] = $m.body.content
@@ -539,12 +592,16 @@ function Tool-MailSaveAttachment($a) {
   return "נשמר: $target"
 }
 
+function Format-DraftHtml($text) {
+  return '<div dir="rtl" style="font-family:Arial">' + [Net.WebUtility]::HtmlEncode([string]$text).Replace("`n", '<br>') + '</div>'
+}
+
 function Tool-MailCreateDraft($a) {
   $body = [string]$a.body
   $replyTo = Get-Prop $a 'reply_to_message_id' ''
   if ($replyTo) {
     $draft = Invoke-Graph 'POST' "/me/messages/$replyTo/createReply" @{}
-    $html = '<div dir="rtl" style="font-family:Arial">' + [Net.WebUtility]::HtmlEncode($body).Replace("`n", '<br>') + '</div><br>' + $draft.body.content
+    $html = (Format-DraftHtml $body) + '<br>' + $draft.body.content
     $patch = @{ body = @{ contentType = 'HTML'; content = $html } }
     $to = Get-Prop $a 'to' $null
     if ($to) { $patch['toRecipients'] = To-Recipients $to }
@@ -552,13 +609,38 @@ function Tool-MailCreateDraft($a) {
     if ($cc) { $patch['ccRecipients'] = To-Recipients $cc }
     $draft = Invoke-Graph 'PATCH' "/me/messages/$($draft.id)" $patch
   } else {
-    $html = '<div dir="rtl" style="font-family:Arial">' + [Net.WebUtility]::HtmlEncode($body).Replace("`n", '<br>') + '</div>'
+    $html = Format-DraftHtml $body
     $msg = @{ subject = [string](Get-Prop $a 'subject' ''); body = @{ contentType = 'HTML'; content = $html }; toRecipients = (To-Recipients (Get-Prop $a 'to' @())) }
     $cc = Get-Prop $a 'cc' $null
     if ($cc) { $msg['ccRecipients'] = To-Recipients $cc }
     $draft = Invoke-Graph 'POST' '/me/messages' $msg
   }
   return [ordered]@{ draft_id = $draft.id; subject = $draft.subject; web_link = (Get-Prop $draft 'webLink' ''); note = 'הטיוטה נשמרה בתיקיית הטיוטות ב-Outlook. שום דבר לא נשלח.' }
+}
+
+function Tool-MailUpdateDraft($a) {
+  $id = [string]$a.draft_id
+  $draft = Invoke-Graph 'GET' ("/me/messages/$id" + '?$select=isDraft,subject,body')
+  if (-not $draft.isDraft) { throw 'זה לא טיוטה: המייל כבר נשלח, ואי אפשר לשנות אותו.' }
+  $patch = @{}
+  $subject = Get-Prop $a 'subject' $null
+  if ($null -ne $subject) { $patch['subject'] = [string]$subject }
+  $to = Get-Prop $a 'to' $null
+  if ($to) { $patch['toRecipients'] = To-Recipients $to }
+  $cc = Get-Prop $a 'cc' $null
+  if ($cc) { $patch['ccRecipients'] = To-Recipients $cc }
+  $body = Get-Prop $a 'body' $null
+  if ($null -ne $body) {
+    # A reply keeps the quoted message, which Outlook places after a horizontal line (divRplyFwdMsg).
+    $html = Format-DraftHtml $body
+    $old = [string]$draft.body.content
+    $quote = [regex]::Match($old, '(?is)<hr[^>]*>|<div[^>]*divRplyFwdMsg')
+    if ($quote.Success) { $html += '<br>' + $old.Substring($quote.Index) }
+    $patch['body'] = @{ contentType = 'HTML'; content = $html }
+  }
+  if ($patch.Count -eq 0) { throw 'לא נמסר מה לשנות בטיוטה.' }
+  $draft = Invoke-Graph 'PATCH' "/me/messages/$id" $patch
+  return [ordered]@{ draft_id = $draft.id; subject = $draft.subject; web_link = (Get-Prop $draft 'webLink' ''); note = 'הטיוטה עודכנה ב-Outlook. שום דבר לא נשלח.' }
 }
 
 function Tool-MailSendDraft($a) {
@@ -573,7 +655,7 @@ function Tool-CalendarEvents($a) {
   $start = To-DateTime $a.start $false
   $end = To-DateTime $a.end $true
   $url = "/me/calendarView?startDateTime=$(Q $start)&endDateTime=$(Q $end)&`$top=100&`$orderby=start/dateTime&`$select=id,subject,start,end,location,organizer,attendees,isOnlineMeeting,bodyPreview,webLink"
-  $r = Invoke-Graph 'GET' $url "outlook.timezone=`"$TimeZone`""
+  $r = Invoke-Graph 'GET' $url -Prefer "outlook.timezone=`"$TimeZone`""
   $events = @($r.value)
   $query = Get-Prop $a 'query' ''
   if ($query) { $events = @($events | Where-Object { $_.subject -like "*$query*" }) }
@@ -581,7 +663,7 @@ function Tool-CalendarEvents($a) {
 }
 
 function Tool-CalendarEventRead($a) {
-  $e = Invoke-Graph 'GET' "/me/events/$($a.event_id)?`$select=id,subject,start,end,location,organizer,attendees,isOnlineMeeting,bodyPreview,webLink,body" "outlook.timezone=`"$TimeZone`", outlook.body-content-type=`"text`""
+  $e = Invoke-Graph 'GET' "/me/events/$($a.event_id)?`$select=id,subject,start,end,location,organizer,attendees,isOnlineMeeting,bodyPreview,webLink,body" -Prefer "outlook.timezone=`"$TimeZone`", outlook.body-content-type=`"text`""
   $out = Format-Event $e
   $out['notes'] = (Get-Prop (Get-Prop $e 'body' $null) 'content' '')
   return $out
@@ -601,7 +683,7 @@ function Tool-CalendarCreate($a) {
   if ($text) { $event['body'] = @{ contentType = 'Text'; content = $text } }
   if ($attendees.Count) { $event['attendees'] = @($attendees | ForEach-Object { @{ emailAddress = @{ address = [string]$_ }; type = 'required' } }) }
   if (Get-Prop $a 'online_meeting' $false) { $event['isOnlineMeeting'] = $true; $event['onlineMeetingProvider'] = 'teamsForBusiness' }
-  $e = Invoke-Graph 'POST' '/me/events' $event "outlook.timezone=`"$TimeZone`""
+  $e = Invoke-Graph 'POST' '/me/events' $event -Prefer "outlook.timezone=`"$TimeZone`""
   return (Format-Event $e)
 }
 
@@ -615,7 +697,7 @@ function Tool-CalendarUpdate($a) {
   if (Get-Prop $a 'location' '') { $patch['location'] = @{ displayName = $a.location } }
   if (Get-Prop $a 'body' '') { $patch['body'] = @{ contentType = 'Text'; content = $a.body } }
   if ($patch.Count -eq 0) { throw 'לא נמסר שום שדה לעדכון.' }
-  $e = Invoke-Graph 'PATCH' "/me/events/$($a.event_id)" $patch "outlook.timezone=`"$TimeZone`""
+  $e = Invoke-Graph 'PATCH' "/me/events/$($a.event_id)" $patch -Prefer "outlook.timezone=`"$TimeZone`""
   return (Format-Event $e)
 }
 
@@ -642,7 +724,7 @@ function Tool-OneDriveSearch($a) {
 function Tool-OneDriveList($a) {
   $path = ([string](Get-Prop $a 'path' '')).Trim('/')
   $url = if ($path) { "/me/drive/root:/$((($path -split '/') | ForEach-Object { Q $_ }) -join '/'):/children" } else { '/me/drive/root/children' }
-  $r = Invoke-Graph 'GET' "$url?`$top=200&`$select=name,webUrl,lastModifiedDateTime,size,file,folder"
+  $r = Invoke-Graph 'GET' "${url}?`$top=200&`$select=name,webUrl,lastModifiedDateTime,size,file,folder"
   return @($r.value | ForEach-Object { [ordered]@{ name = $_.name; modified = $_.lastModifiedDateTime; size = $_.size; is_folder = [bool](Get-Prop $_ 'folder' $null); web_url = $_.webUrl } })
 }
 
@@ -651,7 +733,7 @@ $Handlers = @{
   ms_sign_in = ${function:Tool-SignIn}; ms_sign_in_complete = ${function:Tool-SignInComplete}
   mail_search = ${function:Tool-MailSearch}; mail_read = ${function:Tool-MailRead}
   mail_attachments = ${function:Tool-MailAttachments}; mail_save_attachment = ${function:Tool-MailSaveAttachment}
-  mail_create_draft = ${function:Tool-MailCreateDraft}; mail_send_draft = ${function:Tool-MailSendDraft}
+  mail_create_draft = ${function:Tool-MailCreateDraft}; mail_update_draft = ${function:Tool-MailUpdateDraft}; mail_send_draft = ${function:Tool-MailSendDraft}
   calendar_events = ${function:Tool-CalendarEvents}; calendar_event_read = ${function:Tool-CalendarEventRead}
   calendar_create_event = ${function:Tool-CalendarCreate}
   calendar_update_event = ${function:Tool-CalendarUpdate}; calendar_cancel_event = ${function:Tool-CalendarCancel}
