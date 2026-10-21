@@ -47,6 +47,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 HERE = Path(__file__).resolve().parent
+RTL = True  # charts read right to left, like the sheets: first month on the right
 MONTHS_HE = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"]
 SHORT_HE = ["ינו׳", "פבר׳", "מרץ", "אפר׳", "מאי", "יוני", "יולי", "אוג׳", "ספט׳", "אוק׳", "נוב׳", "דצמ׳"]
 DEFAULT_LABELS = {"revenue": "הכנסות", "direct_costs": "עלויות ישירות", "expenses": "הוצאות חודשיות",
@@ -367,6 +368,8 @@ def _chart_frame(ch, title, height=8.2, fmt="#,##0"):
     ch.y_axis.spPr = GraphicalProperties(ln=LineProperties(noFill=True))
     ch.x_axis.spPr = GraphicalProperties(ln=LineProperties(solidFill=BASE))
     ch.x_axis.tickLblPos = "low"
+    if RTL:
+        ch.x_axis.scaling.orientation = "maxMin"  # months from right to left, value axis on the right
     return ch
 
 
@@ -722,11 +725,13 @@ def tick_label(v, thousands):
 
 
 class Plot:
-    """A plain SVG plot frame: months left to right, one value axis, hover bands with a tooltip per month."""
+    """A plain SVG plot frame: months from right to left (RTL, like the sheet), one value axis on the right,
+    hover bands with a tooltip per month."""
 
     def __init__(self, labels, lo, hi, thousands=True, size=(720, 280, 46, 74, 14, 34), axis=True):
         self.labels, self.thousands = labels, thousands
-        self.W, self.H, self.L, self.R, self.T, self.B = size
+        self.W, self.H, axis_margin, end_margin, self.T, self.B = size
+        self.L, self.R = (end_margin, axis_margin) if RTL else (axis_margin, end_margin)
         self.ticks = nice_ticks(lo, hi)
         self.lo, self.hi = self.ticks[0], self.ticks[-1]
         if not axis:
@@ -736,7 +741,7 @@ class Plot:
         self.parts = []
 
     def x(self, i):
-        return self.L + self.band * (i + 0.5)
+        return self.W - self.R - self.band * (i + 0.5) if RTL else self.L + self.band * (i + 0.5)
 
     def y(self, v):
         return self.T + self.ph * (self.hi - v) / (self.hi - self.lo)
@@ -747,13 +752,14 @@ class Plot:
             y = self.y(t)
             out.append(f'<line x1="{self.L}" x2="{self.W - self.R}" y1="{y:.1f}" y2="{y:.1f}" class="{"base" if abs(t) < 1e-9 else "grid"}"/>')
             if len(self.ticks) > 1:
-                out.append(f'<text x="{self.L - 8}" y="{y + 4:.1f}" class="tick" text-anchor="end">{tick_label(t, self.thousands)}</text>')
+                tx, anchor = (self.W - self.R + 8, "start") if RTL else (self.L - 8, "end")
+                out.append(f'<text x="{tx}" y="{y + 4:.1f}" class="tick" text-anchor="{anchor}">{tick_label(t, self.thousands)}</text>')
         for i, lab in enumerate(self.labels):
             out.append(f'<text x="{self.x(i):.1f}" y="{self.H - 10}" class="tick" text-anchor="middle">{esc(lab)}</text>')
         return out
 
     def bands(self, tips):
-        return [f'<rect class="band" x="{self.L + self.band * i:.1f}" y="{self.T}" width="{self.band:.1f}" height="{self.ph}" '
+        return [f'<rect class="band" x="{self.x(i) - self.band / 2:.1f}" y="{self.T}" width="{self.band:.1f}" height="{self.ph}" '
                 f'data-tip="{esc(t)}"/>' for i, t in enumerate(tips)]
 
     def svg(self, label):
@@ -791,7 +797,8 @@ def line_chart(d, L):
     ends.sort()
     for i in range(1, len(ends)):  # keep end labels apart
         ends[i][0] = max(ends[i][0], ends[i - 1][0] + 15)
-    p.parts += [f'<text x="{p.x(len(rows) - 1) + 10:.1f}" y="{y + 4:.1f}" class="end">{t}</text>' for y, t in ends]
+    ex, anchor = (p.x(len(rows) - 1) - 10, "end") if RTL else (p.x(len(rows) - 1) + 10, "start")
+    p.parts += [f'<text x="{ex:.1f}" y="{y + 4:.1f}" class="end" text-anchor="{anchor}">{t}</text>' for y, t in ends]
     return p.svg("מגמה לפי חודש"), [(nm, s) for nm, _, s in series]
 
 
@@ -806,7 +813,8 @@ def change_chart(d, L):
     w = min(24, p.band * 0.28)
     for i, r in enumerate(rows):
         for j, (_, key, slot) in enumerate(series):
-            p.parts.append(f'<path class="bar s{slot}" d="{bar_path(p.x(i) - w - 1 + j * (w + 2), p.y(0), p.y(r[key]), w)}"/>')
+            bx = p.x(i) + 1 - j * (w + 2) if RTL else p.x(i) - w - 1 + j * (w + 2)  # first series on the reading side
+            p.parts.append(f'<path class="bar s{slot}" d="{bar_path(bx, p.y(0), p.y(r[key]), w)}"/>')
     return p.svg("השינוי מחודש לחודש"), [(nm, s) for nm, _, s in series]
 
 
