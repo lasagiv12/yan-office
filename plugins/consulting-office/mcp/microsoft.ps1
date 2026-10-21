@@ -21,7 +21,7 @@ $StdOut.AutoFlush = $true
 # Windows PowerShell 5.1 can serialize arrays as {"value":[...],"Count":n} because of this type data.
 Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue
 
-$ServerVersion = '0.7.1'
+$ServerVersion = '0.7.2'
 $TimeZone = 'Israel Standard Time'
 $Graph = 'https://graph.microsoft.com/v1.0'
 $DataDir = Join-Path $env:APPDATA 'ConsultingOffice'
@@ -284,8 +284,8 @@ $Tools = @(
      description = 'Waits (up to about 45 seconds) for the user to finish the sign-in started by ms_sign_in and stores the credentials securely on this computer.'
      props = @{}; required = @() },
   @{ name = 'mail_search'; title = 'חיפוש מיילים'; readOnly = $true
-     description = 'Searches the signed-in mailbox. Use from (address or domain, e.g. a client domain from the client index), query (free text), since/until (YYYY-MM-DD). Returns newest first.'
-     props = @{ query = @{ type = 'string' }; from = @{ type = 'string' }; since = @{ type = 'string' }; until = @{ type = 'string' }; top = @{ type = 'integer' } }; required = @() },
+     description = 'Searches the signed-in mailbox (all folders, including sent mail). Use from (sender address or domain, e.g. a client domain from the client index), to (recipient address or domain, for mail the user sent), query (free text: words from the subject, body or attachment names), since/until (YYYY-MM-DD). Returns newest first.'
+     props = @{ query = @{ type = 'string' }; from = @{ type = 'string' }; to = @{ type = 'string' }; since = @{ type = 'string' }; until = @{ type = 'string' }; top = @{ type = 'integer' } }; required = @() },
   @{ name = 'mail_read'; title = 'קריאת מייל'; readOnly = $true
      description = 'Returns the full plain-text body and recipients of one message.'
      props = @{ message_id = @{ type = 'string' } }; required = @('message_id') },
@@ -305,7 +305,7 @@ $Tools = @(
      description = 'Sends an existing draft. Works only if sending was enabled in ms_configure (allow_send) and only with confirmed=true after the user approved sending this exact draft.'
      props = @{ draft_id = @{ type = 'string' }; confirmed = @{ type = 'boolean' } }; required = @('draft_id', 'confirmed') },
   @{ name = 'calendar_events'; title = 'אירועים ביומן'; readOnly = $true
-     description = 'Lists calendar events between start and end (YYYY-MM-DD or YYYY-MM-DDTHH:MM, Israel time). Optional query filters by text in the subject. Use it to answer what is scheduled and when the user is free.'
+     description = 'Lists calendar events between start and end (YYYY-MM-DD or YYYY-MM-DDTHH:MM, Israel time). Optional query keeps events whose subject, location, organizer or attendee names and addresses contain the text (a client name, a person, or a client email domain). Use it to answer what is scheduled, when the next or last meeting with someone is, and when the user is free.'
      props = @{ start = @{ type = 'string' }; end = @{ type = 'string' }; query = @{ type = 'string' } }; required = @('start', 'end') },
   @{ name = 'calendar_event_read'; title = 'קריאת אירוע'; readOnly = $true
      description = 'Returns one calendar event with its full plain-text notes (the consultant writes meeting notes inside the event). Use it to bring past meeting notes into the client file.'
@@ -567,12 +567,14 @@ function Tool-MailSearch($a) {
   $sel = '$select=id,subject,from,toRecipients,receivedDateTime,isRead,hasAttachments,bodyPreview,webLink'
   $query = Get-Prop $a 'query' ''
   $from = Get-Prop $a 'from' ''
+  $to = Get-Prop $a 'to' ''
   $since = Get-Prop $a 'since' ''
   $until = Get-Prop $a 'until' ''
-  if ($query -or ($from -and -not $from.Contains('@'))) {
-    # $search cannot be combined with $filter/$orderby, so sender, domain and dates go into the KQL query.
+  if ($query -or $to -or ($from -and -not $from.Contains('@'))) {
+    # $search cannot be combined with $filter/$orderby, so sender, recipient, domain and dates go into the KQL query.
     $kql = $query
     if ($from) { $kql = ("$kql from:" + $from.TrimStart('@')).Trim() }
+    if ($to) { $kql = ("$kql to:" + $to.TrimStart('@')).Trim() }
     if ($since) { $kql += " received>=$since" }
     if ($until) { $kql += " received<=$until" }
     $r = Invoke-Graph 'GET' "/me/messages?`$search=$(Q ('"' + $kql + '"'))&`$top=$top&$sel"
@@ -681,7 +683,17 @@ function Tool-CalendarEvents($a) {
   $r = Invoke-Graph 'GET' $url -Prefer "outlook.timezone=`"$TimeZone`""
   $events = @($r.value)
   $query = Get-Prop $a 'query' ''
-  if ($query) { $events = @($events | Where-Object { $_.subject -like "*$query*" }) }
+  if ($query) {
+    # Not only the subject: a client meeting is often titled with a person's name, so attendees and location count too.
+    $events = @($events | Where-Object {
+      $people = @((Get-Prop $_ 'organizer' $null)) + @(Get-Prop $_ 'attendees' @())
+      $text = @((Get-Prop $_ 'subject' ''), (Get-Prop (Get-Prop $_ 'location' $null) 'displayName' '')) + @($people | ForEach-Object {
+        $ea = Get-Prop $_ 'emailAddress' $null
+        (Get-Prop $ea 'name' ''); (Get-Prop $ea 'address' '')
+      })
+      ($text -join ' ').IndexOf($query, [StringComparison]::OrdinalIgnoreCase) -ge 0
+    })
+  }
   return @($events | ForEach-Object { Format-Event $_ })
 }
 

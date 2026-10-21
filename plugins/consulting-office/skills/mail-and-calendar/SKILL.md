@@ -1,6 +1,6 @@
 ---
 name: mail-and-calendar
-description: Works with the consultant's Outlook mail, calendar, contacts and OneDrive through the Microsoft 365 connection - finds client emails, writes every requested email as a draft in Outlook (new or reply), sends only when allowed and approved, checks availability, schedules, moves or cancels meetings, finds, adds and updates Outlook contacts, and saves email attachments into the client folder. Also handles first-time connection setup. Use for "מה המיילים האחרונים מ...", "תרשום לי מייל", "תכתוב מייל ל...", "תנסח מייל", "תכין מייל", "תענה למייל של...", "תכין טיוטה", "מתי אני פנוי", "מה יש לי ביומן", "תקבע פגישה עם...", "תזיז את הפגישה", "תבטל את הפגישה", "תשמור את הקובץ מהמייל בתיק", "תוסיף איש קשר", "תיצור לי איש קשר באאוטלוק", "תשמור את ... באנשי הקשר", "מה הטלפון של...", "תעדכן את המייל של ... באנשי הקשר", "חבר את Microsoft", "התחברות ל-Outlook", "קישור לאיש המחשבים".
+description: Works with the consultant's Outlook mail, calendar, contacts and OneDrive through the Microsoft 365 connection - finds client emails, writes every requested email as a draft in Outlook (new or reply), sends only when allowed and approved, checks availability, schedules, moves or cancels meetings, finds, adds and updates Outlook contacts, and saves email attachments into the client folder. Also handles first-time connection setup. Use for "מה המיילים האחרונים מ...", "תמצא לי את המייל של ... על ...", "מה שלחתי ל...", "מתי הפגישה הבאה עם...", "מתי נפגשתי לאחרונה עם...", "תרשום לי מייל", "תכתוב מייל ל...", "תנסח מייל", "תכין מייל", "תענה למייל של...", "תכין טיוטה", "מתי אני פנוי", "מה יש לי ביומן", "תקבע פגישה עם...", "תזיז את הפגישה", "תבטל את הפגישה", "תשמור את הקובץ מהמייל בתיק", "תוסיף איש קשר", "תיצור לי איש קשר באאוטלוק", "תשמור את ... באנשי הקשר", "מה הטלפון של...", "תעדכן את המייל של ... באנשי הקשר", "חבר את Microsoft", "התחברות ל-Outlook", "קישור לאיש המחשבים".
 ---
 
 # מייל, יומן ו-OneDrive
@@ -47,7 +47,9 @@ description: Works with the consultant's Outlook mail, calendar, contacts and On
 
 ## מייל
 - **מיילים של לקוח:** לוקחים את הכתובות והדומיינים מ-`tblClients` באינדקס, ומחפשים ב-`mail_search` עם `from` לכל אחד. אם הדומיין משותף לכולם (gmail, outlook), מחפשים לפי הכתובת המלאה.
-- **"מה חדש מ...":** מאז הפגישה האחרונה עם הלקוח (`tblMeetings`). מציגים טבלה: תאריך, נושא, שורה אחת מהתוכן, האם נענה.
+- **"מה חדש מ...":** מאז הפגישה האחרונה עם הלקוח (`tblMeetings`). מציגים טבלה: תאריך, נושא, שורה אחת מהתוכן, האם נקרא.
+- **מייל מסוים** ("תמצא לי את המייל של דנה על הצעת המחיר"): `mail_search` עם `query` (מילים מהנושא, מהתוכן או משם הקובץ המצורף), ועם `from` אם ידוע מי שלח. החיפוש עובר על כל התיקיות. אם לא נמצא, מנסים פעם אחת מילים קרובות או טווח תאריכים רחב יותר, ואומרים מה חיפשו.
+- **מה יאן שלח** ("מה שלחתי לדנה", "שלחתי לאלפא את ההסכם?"): `mail_search` עם `to` (כתובת, או הדומיין של הלקוח מהאינדקס), ועם `query` אם יש נושא.
 - **קריאה מלאה:** `mail_read`. מסכמים בעברית, ומפרידים בין מה שכתוב לבין הפרשנות.
 - **כל בקשה לכתוב מייל היא טיוטה ב-Outlook.** "תרשום לי מייל", "תכתוב ל...", "תנסח", "תענה ל..." וכל ניסוח דומה: יוצרים טיוטה בתיקיית הטיוטות. לא שואלים "לשמור כטיוטה?", ולא מגישים נוסח להעתקה.
   1. **מה צריך:** למי (שם וכתובת), נושא, ומה המייל אומר. הכתובת: מ-`tblClients` באינדקס, או מהמייל שעונים עליו. בתשובה מעבירים `reply_to_message_id`, כדי שהמייל המקורי יופיע מתחת.
@@ -62,6 +64,8 @@ description: Works with the consultant's Outlook mail, calendar, contacts and On
 
 ## יומן
 - **"מה יש לי...":** `calendar_events` לטווח המבוקש. מציגים לפי יום ושעה, ומסמנים פגישות עם לקוחות מהאינדקס.
+- **"מתי הפגישה הבאה עם...", "מתי נפגשנו לאחרונה":** `calendar_events` מהיום ל-90 יום קדימה (או 180 יום אחורה), עם `query` = שם הלקוח או האדם. ה-`query` בודק גם את המשתתפים והמיקום, ולכן אם לא נמצא, מנסים שוב עם הדומיין או הכתובת של הלקוח מ-`tblClients`. אם הפגישה הבאה לא מופיעה ב-"פגישה הבאה" של הלקוח בתיק, מציעים לעדכן.
+- **"מה כתבתי בפגישה עם ... ב-...":** מאתרים את האירוע (`calendar_events` עם `query`), ואז `calendar_event_read` להערות המלאות.
 - **"מתי אני פנוי":** `calendar_events` לטווח, ומחשבים חלונות פנויים בשעות העבודה. ברירת המחדל: א'–ה', 08:00–18:00. אם יאן אמר אחרת, לפי מה שאמר. מציעים 2 עד 3 אפשרויות.
 - **קביעת פגישה:** מציגים בדיוק: נושא, תאריך ושעה, מיקום או אונליין, משתתפים, תוכן קצר. מציינים ש"משתתפים יקבלו הזמנה במייל". אחרי אישור מפורש: `calendar_create_event`, ואם יש משתתפים, עם `confirmed=true`. אחר כך מציעים לעדכן "פגישה הבאה" ב-`tblMeetings` של הלקוח, לפי `approval-flow.md`.
 - **הזזה או ביטול:** מאתרים את האירוע (`calendar_events` עם `query`), מציגים מה ישתנה ומי יקבל הודעה. אחרי אישור: `calendar_update_event` או `calendar_cancel_event` עם `confirmed=true`.
@@ -69,6 +73,7 @@ description: Works with the consultant's Outlook mail, calendar, contacts and On
 
 ## אנשי קשר
 - **"מה הטלפון של...", "יש לי את ... באנשי הקשר?":** `contacts_search` עם חלק מהשם, מהמייל, מהטלפון או מהחברה.
+- **לא נמצא באנשי הקשר:** מחפשים במיילים (`mail_search` עם השם ב-`query`, או עם `from`), ובמייל האחרון שלו (`mail_read`) לוקחים את הכתובת, ואת הטלפון מהחתימה אם יש. אומרים שזה מהמייל ולא מאנשי הקשר, ומציעים לשמור אותו כאיש קשר. אם גם שם אין, בודקים את `tblClients` באינדקס, ואחרת אומרים שלא נמצא.
 - **איש קשר חדש** ("תוסיף איש קשר", "תשמור את ... באנשי הקשר"):
   1. **מה צריך:** שם, ולפחות מייל או טלפון. חברה, תפקיד והערה אם נאמרו. פרטים שלא נאמרו אפשר לקחת מ-`tblClients` באינדקס או מהחתימה במייל של אותו אדם, ואומרים מאיפה לקחו. לא ממציאים.
   2. **בודקים כפילות:** `contacts_search` לפי המייל, ואם אין מייל, לפי השם. אם יש כבר איש קשר כזה, מציגים אותו ושואלים אם לעדכן אותו במקום ליצור חדש.
