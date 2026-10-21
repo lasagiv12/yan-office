@@ -6,6 +6,8 @@
 # Runs on Windows PowerShell 5.1, which ships with Windows, so nothing has to be installed.
 # Config and the refresh token live in %APPDATA%\ConsultingOffice; the token is encrypted with
 # Windows DPAPI for the current user. stdout carries JSON-RPC only; diagnostics go to stderr.
+# file_open opens a document the assistant just made (a meeting document, for example) in its default
+# app on this computer, so the consultant does not have to look for it.
 # Every write action that reaches other people (send, invitations, cancellations) requires
 # confirmed=true, which the skills set only after the user approved that exact action.
 
@@ -21,7 +23,7 @@ $StdOut.AutoFlush = $true
 # Windows PowerShell 5.1 can serialize arrays as {"value":[...],"Count":n} because of this type data.
 Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue
 
-$ServerVersion = '0.7.2'
+$ServerVersion = '0.7.4'
 $TimeZone = 'Israel Standard Time'
 $Graph = 'https://graph.microsoft.com/v1.0'
 $DataDir = Join-Path $env:APPDATA 'ConsultingOffice'
@@ -256,7 +258,13 @@ function Format-Event($e) {
 }
 
 function To-Recipients($list) {
-  return @(@($list) | Where-Object { $_ } | ForEach-Object { @{ emailAddress = @{ address = [string]$_ } } })
+  # Call it inside @(): a function returning a one-item array hands back the item itself, and Graph rejects
+  # toRecipients as an object ("does not match schema"). "Name <address>" (as mail_search shows it) keeps the name.
+  return @(@($list) | Where-Object { $_ } | ForEach-Object {
+    $text = ([string]$_).Trim()
+    if ($text -match '^(.*?)\s*<([^<>]+)>$') { @{ emailAddress = @{ name = $Matches[1].Trim(' "'); address = $Matches[2].Trim() } } }
+    else { @{ emailAddress = @{ address = $text } } }
+  })
 }
 
 # ---------- tools ----------
@@ -333,8 +341,14 @@ $Tools = @(
      props = @{ query = @{ type = 'string' }; top = @{ type = 'integer' } }; required = @('query') },
   @{ name = 'onedrive_list'; title = 'רשימת קבצים ב-OneDrive'; readOnly = $true
      description = 'Lists a OneDrive folder in the cloud (path relative to the OneDrive root, empty for the root).'
-     props = @{ path = @{ type = 'string' } }; required = @() }
+     props = @{ path = @{ type = 'string' } }; required = @() },
+  @{ name = 'file_open'; title = 'פתיחת מסמך'; readOnly = $true
+     description = 'Opens a document on this computer in its default app (Word, Excel, PowerPoint, PDF reader or browser), the way double-clicking it would. Use it right after creating or adding to a meeting document, without asking. path is the full local path. Only documents: docx, doc, xlsx, xls, pptx, ppt, pdf, html, htm. Nothing is changed in the file.'
+     props = @{ path = @{ type = 'string' } }; required = @('path') }
 )
+
+# Documents only: file_open must never start a program or a script.
+$OpenableTypes = @('.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt', '.pdf', '.html', '.htm')
 
 function To-DateTime($text, $endOfDay) {
   if ($text -match '^\d{4}-\d{2}-\d{2}$') { return $text + $(if ($endOfDay) { 'T23:59:59' } else { 'T00:00:00' }) }
@@ -629,15 +643,15 @@ function Tool-MailCreateDraft($a) {
     $html = (Format-DraftHtml $body) + '<br>' + $draft.body.content
     $patch = @{ body = @{ contentType = 'HTML'; content = $html } }
     $to = Get-Prop $a 'to' $null
-    if ($to) { $patch['toRecipients'] = To-Recipients $to }
+    if ($to) { $patch['toRecipients'] = @(To-Recipients $to) }
     $cc = Get-Prop $a 'cc' $null
-    if ($cc) { $patch['ccRecipients'] = To-Recipients $cc }
+    if ($cc) { $patch['ccRecipients'] = @(To-Recipients $cc) }
     $draft = Invoke-Graph 'PATCH' "/me/messages/$($draft.id)" $patch
   } else {
     $html = Format-DraftHtml $body
-    $msg = @{ subject = [string](Get-Prop $a 'subject' ''); body = @{ contentType = 'HTML'; content = $html }; toRecipients = (To-Recipients (Get-Prop $a 'to' @())) }
+    $msg = @{ subject = [string](Get-Prop $a 'subject' ''); body = @{ contentType = 'HTML'; content = $html }; toRecipients = @(To-Recipients (Get-Prop $a 'to' @())) }
     $cc = Get-Prop $a 'cc' $null
-    if ($cc) { $msg['ccRecipients'] = To-Recipients $cc }
+    if ($cc) { $msg['ccRecipients'] = @(To-Recipients $cc) }
     $draft = Invoke-Graph 'POST' '/me/messages' $msg
   }
   return [ordered]@{ draft_id = $draft.id; subject = $draft.subject; web_link = (Get-Prop $draft 'webLink' ''); note = 'הטיוטה נשמרה בתיקיית הטיוטות ב-Outlook. שום דבר לא נשלח.' }
@@ -651,9 +665,9 @@ function Tool-MailUpdateDraft($a) {
   $subject = Get-Prop $a 'subject' $null
   if ($null -ne $subject) { $patch['subject'] = [string]$subject }
   $to = Get-Prop $a 'to' $null
-  if ($to) { $patch['toRecipients'] = To-Recipients $to }
+  if ($to) { $patch['toRecipients'] = @(To-Recipients $to) }
   $cc = Get-Prop $a 'cc' $null
-  if ($cc) { $patch['ccRecipients'] = To-Recipients $cc }
+  if ($cc) { $patch['ccRecipients'] = @(To-Recipients $cc) }
   $body = Get-Prop $a 'body' $null
   if ($null -ne $body) {
     # A reply keeps the quoted message, which Outlook places after a horizontal line (divRplyFwdMsg).
@@ -861,6 +875,19 @@ function Tool-OneDriveList($a) {
   return @($r.value | ForEach-Object { [ordered]@{ name = $_.name; modified = $_.lastModifiedDateTime; size = $_.size; is_folder = [bool](Get-Prop $_ 'folder' $null); web_url = $_.webUrl } })
 }
 
+function Tool-FileOpen($a) {
+  $path = ([string](Get-Prop $a 'path' '')).Trim().Trim('"')
+  if (-not $path) { throw 'לא נמסר איזה קובץ לפתוח.' }
+  $path = [Environment]::ExpandEnvironmentVariables($path)
+  if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "הקובץ לא נמצא במחשב: $path" }
+  $full = (Resolve-Path -LiteralPath $path).ProviderPath
+  $ext = [IO.Path]::GetExtension($full).ToLowerInvariant()
+  if ($OpenableTypes -notcontains $ext) { throw "פותחים רק מסמכים (Word, Excel, PowerPoint, PDF, HTML), לא $ext." }
+  if ($env:CONSULTING_OFFICE_NO_OPEN) { return "בדיקה: הקובץ לא נפתח ($full)." }
+  Start-Process -FilePath $full
+  return "הקובץ נפתח: $full"
+}
+
 $Handlers = @{
   ms_status = ${function:Tool-Status}; ms_configure = ${function:Tool-Configure}; ms_check = ${function:Tool-Check}; ms_admin_link = ${function:Tool-AdminLink}; ms_sign_out = ${function:Tool-SignOut}
   ms_sign_in = ${function:Tool-SignIn}; ms_sign_in_complete = ${function:Tool-SignInComplete}
@@ -872,6 +899,7 @@ $Handlers = @{
   calendar_update_event = ${function:Tool-CalendarUpdate}; calendar_cancel_event = ${function:Tool-CalendarCancel}
   contacts_search = ${function:Tool-ContactsSearch}; contacts_create = ${function:Tool-ContactsCreate}; contacts_update = ${function:Tool-ContactsUpdate}
   onedrive_search = ${function:Tool-OneDriveSearch}; onedrive_list = ${function:Tool-OneDriveList}
+  file_open = ${function:Tool-FileOpen}
 }
 
 # ---------- MCP over stdio ----------
