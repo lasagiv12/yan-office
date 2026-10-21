@@ -21,7 +21,7 @@ $StdOut.AutoFlush = $true
 # Windows PowerShell 5.1 can serialize arrays as {"value":[...],"Count":n} because of this type data.
 Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue
 
-$ServerVersion = '0.5.3'
+$ServerVersion = '0.6.0'
 $TimeZone = 'Israel Standard Time'
 $Graph = 'https://graph.microsoft.com/v1.0'
 $DataDir = Join-Path $env:APPDATA 'ConsultingOffice'
