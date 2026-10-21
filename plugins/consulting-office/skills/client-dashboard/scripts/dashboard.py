@@ -1221,6 +1221,9 @@ def build_pdf(html_path, pdf_path):
 # ---------------------------------------------------------------- CLI
 
 def main():
+    for stream in (sys.stdout, sys.stderr):  # a Windows console in cp1252/cp1255 cannot print ✓ or Hebrew
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("build", help="create or update the Excel dashboard from a data file")

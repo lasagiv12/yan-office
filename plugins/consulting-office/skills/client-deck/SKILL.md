@@ -5,7 +5,7 @@ description: Builds a client presentation (quarterly status deck or business-pla
 
 # מצגת ללקוח
 
-קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`.
+קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/hebrew-documents.md`.
 
 ## שלב 1: תוכן (הכי חשוב)
 קודם כותבים תוכן, ורק אחר כך מעצבים. מציגים בשיחה את רשימת השקפים לאישור: כותרת ו-3 עד 5 נקודות לכל שקף, ומקור לכל מספר.
@@ -25,8 +25,9 @@ description: Builds a client presentation (quarterly status deck or business-pla
 **מה לא נכנס למצגת ללקוח:** פריטים חסויים, משימות של יאן, הערות פנימיות.
 
 ## שלב 2: קובץ
-- **PowerPoint (ברירת המחדל):** אם יש תבנית או מיתוג ב-`לקוחות/_מערכת/תבניות/` (קובץ `.pptx`), עובדים עליה. אם אין, עיצוב נקי: רקע בהיר, כותרות כהות, צבע הדגשה אחד, ימין לשמאל, גופן Arial.
-- **HTML (כשמבקשים "כדף אינטרנט" או "HTML"):** אותו תוכן בדיוק, קובץ אחד, ימין לשמאל, מותאם למסך ולהדפסה. תמונות נשארות קבצים נפרדים בתיקייה, ולא מוטמעות בקוד.
+- **PowerPoint (ברירת המחדל):** אם יש תבנית או מיתוג ב-`לקוחות/_מערכת/תבניות/` (קובץ `.pptx`), עובדים עליה. אם אין, עיצוב נקי: רקע בהיר, כותרות כהות, צבע הדגשה אחד, גופן Arial. כל שקף מימין לשמאל לפי `hebrew-documents.md`.
+- **HTML (כשמבקשים "כדף אינטרנט" או "HTML"):** אותו תוכן בדיוק, קובץ אחד, מימין לשמאל (`hebrew-documents.md`), מותאם למסך ולהדפסה. תמונות נשארות קבצים נפרדים בתיקייה, ולא מוטמעות בקוד.
+- **לפני שמוסרים:** תיקון ובדיקה של כיוון לפי `hebrew-documents.md`.
 - **שמירה:** ב-`06 תוצרים ומצגות/<YYYY-MM-DD> <סוג מצגת>.<pptx|html>`. בתיקייה נשאר רק הקובץ הזה. קוד שבונה את המצגת, חבילות כמו `node_modules` וקבצי ביניים נשארים בתיקיית העבודה (`data-access.md`).
 
 ## כללים

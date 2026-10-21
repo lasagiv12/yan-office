@@ -5,7 +5,7 @@ description: Brings an existing client of the consultant into the system - build
 
 # קליטת לקוח קיים
 
-קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/meetings-doc.md`, `references/approval-flow.md`.
+קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/meetings-doc.md`, `references/approval-flow.md`, `references/hebrew-documents.md`.
 
 המטרה: לקוח שיאן כבר עובד איתו מקבל תיק במבנה הקבוע, עם כל מה שכבר קיים: מסמכים, משימות, מספרים והיסטוריית פגישות. בלי לאבד שום דבר ובלי לשנות את תוכן הקבצים המקוריים.
 
@@ -74,6 +74,7 @@ description: Brings an existing client of the consultant into the system - build
   - כותרת: `פגישה <תאריך> · <נושא האירוע>`.
   - שורת סטטוס: `סטטוס: יובא מהיומן ב-<היום>`.
   - מתחת ל"מה עלה בפגישה": הטקסט של יאן **כמו שהוא**, בלי ניסוח מחדש ובלי מיון לכותרות.
+  - בלי טבלאות סימון, בלי משבצות ובלי חלקי "לקריאה". גם הפגישה הראשונה מהיומן נכנסת כפרק רגיל, ולא נוצר לה מסמך פגישה ראשונה.
 - **פגישה שכבר יש לה פרק במסמך:** לא נוגעים בה.
 - **אם יש כבר פרקים במסמך,** הפרקים המיובאים נכנסים במקום הנכון לפי התאריך.
 - **פגישות בלי הערות:** נכנסות רק ל-`tblMeetings`, לא למסמך.

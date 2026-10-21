@@ -5,7 +5,7 @@ description: Answers questions about a client's tasks and updates them (add, clo
 
 # משימות
 
-קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/approval-flow.md`.
+קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/approval-flow.md`, `references/hebrew-documents.md`.
 
 כל משימה יושבת בטבלה `tblTasks` בקובץ `00 תיק לקוח.xlsx` של הלקוח. כל חישוב נעשה מהטבלה, לפי התאריך של היום, ולא מלוח המצב.
 

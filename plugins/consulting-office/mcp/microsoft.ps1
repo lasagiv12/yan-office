@@ -1,6 +1,6 @@
 ﻿# Microsoft 365 connector for the consulting-office plugin: an MCP server over stdio.
 # Mail (search, read, attachments, drafts, send when allowed), calendar (read, create, update,
-# cancel) and OneDrive (search, list) through Microsoft Graph, signed in as the consultant himself
+# cancel), contacts (search, create, update) and OneDrive (search, list) through Microsoft Graph, signed in as the consultant himself
 # (device code or browser sign-in with PKCE, delegated permissions only, no client secret).
 #
 # Runs on Windows PowerShell 5.1, which ships with Windows, so nothing has to be installed.
@@ -21,7 +21,7 @@ $StdOut.AutoFlush = $true
 # Windows PowerShell 5.1 can serialize arrays as {"value":[...],"Count":n} because of this type data.
 Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue
 
-$ServerVersion = '0.6.0'
+$ServerVersion = '0.7.0'
 $TimeZone = 'Israel Standard Time'
 $Graph = 'https://graph.microsoft.com/v1.0'
 $DataDir = Join-Path $env:APPDATA 'ConsultingOffice'
@@ -32,6 +32,8 @@ $LogPath = Join-Path $DataDir 'microsoft-log.txt'
 $script:AccessToken = $null
 $script:AccessExpires = [DateTime]::MinValue
 $script:Browser = $null
+# False when the stored sign-in predates the contacts permission: mail and calendar keep working, contacts need one new sign-in.
+$script:ContactsAllowed = $true
 
 function Log($text) { [Console]::Error.WriteLine("[microsoft] $text") }
 
@@ -65,7 +67,7 @@ function Get-Config {
 function Get-AdminConsentUrl {
   $cfg = Get-Config
   # Always include Mail.Send, so one approval also covers turning sending on later. Drafts-only stays the default.
-  $scopes = (@('User.Read', 'Mail.ReadWrite', 'Mail.Send', 'Calendars.ReadWrite', 'Files.Read.All') | ForEach-Object { "https://graph.microsoft.com/$_" }) -join ' '
+  $scopes = (@('User.Read', 'Mail.ReadWrite', 'Mail.Send', 'Calendars.ReadWrite', 'Contacts.ReadWrite', 'Files.Read.All') | ForEach-Object { "https://graph.microsoft.com/$_" }) -join ' '
   return "https://login.microsoftonline.com/$($cfg.tenant_id)/v2.0/adminconsent?client_id=$($cfg.client_id)&scope=$([uri]::EscapeDataString($scopes))&redirect_uri=$([uri]::EscapeDataString('https://login.microsoftonline.com/common/oauth2/nativeclient'))"
 }
 
@@ -102,8 +104,9 @@ function Save-Config($tenant, $client, $allowSend) {
   [IO.File]::WriteAllText($ConfigPath, ($cfg | ConvertTo-Json), $Utf8)
 }
 
-function Get-Scopes($cfg) {
+function Get-Scopes($cfg, [switch]$WithoutContacts) {
   $scopes = 'offline_access User.Read Mail.ReadWrite Calendars.ReadWrite Files.Read.All'
+  if (-not $WithoutContacts) { $scopes += ' Contacts.ReadWrite' }
   if ($cfg -and $cfg.allow_send) { $scopes += ' Mail.Send' }
   return $scopes
 }
@@ -157,6 +160,15 @@ function Get-AccessToken {
   try {
     $r = Invoke-Form "https://login.microsoftonline.com/$($cfg.tenant_id)/oauth2/v2.0/token" @{
       client_id = $cfg.client_id; grant_type = 'refresh_token'; refresh_token = $refresh; scope = (Get-Scopes $cfg)
+    }
+    $script:ContactsAllowed = $true
+    # A sign-in from before contacts were added has no consent for Contacts.ReadWrite (AADSTS65001).
+    # Renew without it, so mail and calendar keep working; the contacts tools then ask for one new sign-in.
+    if ($null -ne $r -and $null -eq $r.PSObject.Properties['access_token'] -and "$(Get-Prop $r 'error_description' '')" -match 'AADSTS65001') {
+      $r = Invoke-Form "https://login.microsoftonline.com/$($cfg.tenant_id)/oauth2/v2.0/token" @{
+        client_id = $cfg.client_id; grant_type = 'refresh_token'; refresh_token = $refresh; scope = (Get-Scopes $cfg -WithoutContacts)
+      }
+      $script:ContactsAllowed = $false
     }
   } catch {
     # No answer from Microsoft (network, proxy, outage): the stored sign-in is still valid.
@@ -307,6 +319,15 @@ $Tools = @(
   @{ name = 'calendar_cancel_event'; title = 'ביטול אירוע'; readOnly = $false; destructive = $true
      description = 'Cancels an event. Attendees receive a cancellation with the optional comment. Always requires confirmed=true after user approval.'
      props = @{ event_id = @{ type = 'string' }; comment = @{ type = 'string' }; confirmed = @{ type = 'boolean' } }; required = @('event_id', 'confirmed') },
+  @{ name = 'contacts_search'; title = 'חיפוש איש קשר'; readOnly = $true
+     description = 'Searches the user''s Outlook contacts (default contacts folder) by any part of a name, email address, phone number or company. Use it before contacts_create to avoid duplicates, and to find a contact_id for contacts_update.'
+     props = @{ query = @{ type = 'string' }; top = @{ type = 'integer' } }; required = @('query') },
+  @{ name = 'contacts_create'; title = 'איש קשר חדש'; readOnly = $false
+     description = 'Creates a contact in the user''s Outlook contacts. Nothing is sent to anyone. Returns the saved contact with its contact_id; only this result proves the contact exists. display_name defaults to given_name and surname.'
+     props = @{ given_name = @{ type = 'string' }; surname = @{ type = 'string' }; display_name = @{ type = 'string' }; emails = @{ type = 'array'; items = @{ type = 'string' } }; mobile_phone = @{ type = 'string' }; business_phone = @{ type = 'string' }; company = @{ type = 'string' }; job_title = @{ type = 'string' }; notes = @{ type = 'string' } }; required = @() },
+  @{ name = 'contacts_update'; title = 'עדכון איש קשר'; readOnly = $false
+     description = 'Changes an existing Outlook contact. Only the fields passed change. emails are added to the existing addresses (none are removed); mobile_phone and business_phone replace the current number; notes replaces the current notes.'
+     props = @{ contact_id = @{ type = 'string' }; given_name = @{ type = 'string' }; surname = @{ type = 'string' }; display_name = @{ type = 'string' }; emails = @{ type = 'array'; items = @{ type = 'string' } }; mobile_phone = @{ type = 'string' }; business_phone = @{ type = 'string' }; company = @{ type = 'string' }; job_title = @{ type = 'string' }; notes = @{ type = 'string' } }; required = @('contact_id') },
   @{ name = 'onedrive_search'; title = 'חיפוש ב-OneDrive'; readOnly = $true
      description = 'Searches the user''s OneDrive in the cloud by file name and content. For reading and writing client files on this computer, use the synced folder instead.'
      props = @{ query = @{ type = 'string' }; top = @{ type = 'integer' } }; required = @('query') },
@@ -328,7 +349,8 @@ function Tool-Status($a) {
   if (-not (Test-Path $TokenPath)) { return "עוד לא נכנסו לחשבון Microsoft. לא צריך מזהים: הצעד הבא הוא ms_sign_in.$note" }
   $me = Invoke-Graph 'GET' '/me?$select=displayName,mail,userPrincipalName'
   $send = if ($cfg.allow_send) { 'מופעלת (רק עם אישור לכל מייל)' } else { 'כבויה: טיוטות בלבד' }
-  return "מחובר בשם $($me.displayName) ($($me.mail), כניסה: $($me.userPrincipalName)). שליחת מייל: $send. אם זה לא החשבון של בעל התיבה, להפעיל ms_sign_out ולהתחבר מחדש."
+  $contacts = if ($script:ContactsAllowed) { 'מאושרים' } else { 'עוד לא אושרו: צריך להיכנס שוב פעם אחת (ms_sign_in) כדי לעבוד עם אנשי קשר. מייל ויומן עובדים גם בלי זה' }
+  return "מחובר בשם $($me.displayName) ($($me.mail), כניסה: $($me.userPrincipalName)). שליחת מייל: $send. אנשי קשר: $contacts. אם זה לא החשבון של בעל התיבה, להפעיל ms_sign_out ולהתחבר מחדש."
 }
 
 function Tool-Configure($a) {
@@ -443,6 +465,7 @@ function Complete-BrowserSignIn($cfg) {
 function Save-SignIn($r) {
   Save-RefreshToken $r.refresh_token
   Write-AuthLog 'נכנס לחשבון'
+  $script:ContactsAllowed = $true
   $script:AccessToken = $r.access_token
   $script:AccessExpires = [DateTime]::UtcNow.AddSeconds([int]$r.expires_in - 120)
 }
@@ -508,9 +531,9 @@ $app = Get-MgServicePrincipal -Filter "appId eq '14d82eec-204b-4c2f-b7e8-296a70d
 if (-not $app) { $app = New-MgServicePrincipal -AppId '14d82eec-204b-4c2f-b7e8-296a70dab67e' }
 $graph = Get-MgServicePrincipal -Filter "appId eq '00000003-0000-0000-c000-000000000000'"
 $user = Get-MgUser -UserId '<the address the user signs in to Outlook with>'
-New-MgOauth2PermissionGrant -BodyParameter @{ clientId = $app.Id; consentType = 'Principal'; principalId = $user.Id; resourceId = $graph.Id; scope = 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite Files.Read.All' }
+New-MgOauth2PermissionGrant -BodyParameter @{ clientId = $app.Id; consentType = 'Principal'; principalId = $user.Id; resourceId = $graph.Id; scope = 'offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite Contacts.ReadWrite Files.Read.All' }
 '@
-  return "האפליקציה: Microsoft Graph Command Line Tools ($DefaultClient)`nההרשאות (delegated): User.Read, Mail.ReadWrite, Mail.Send, Calendars.ReadWrite, Files.Read.All`nהחשבון: זה שהמשתמש נכנס איתו ל-Outlook (כתובת הכניסה). כתובת השולח העסקית היא בדרך כלל כתובת של אותה תיבה.`n`nאפשרות א, לכל הארגון: המנהל פותח את הקישור, נכנס עם חשבון מנהל ולוחץ Accept (דף ריק אחרי האישור תקין):`n$(Get-AdminConsentUrl)`n`nאפשרות ב, רק לחשבון אחד (Microsoft Graph PowerShell, מנהל):`n" + $perUser
+  return "האפליקציה: Microsoft Graph Command Line Tools ($DefaultClient)`nההרשאות (delegated): User.Read, Mail.ReadWrite, Mail.Send, Calendars.ReadWrite, Contacts.ReadWrite, Files.Read.All`nהחשבון: זה שהמשתמש נכנס איתו ל-Outlook (כתובת הכניסה). כתובת השולח העסקית היא בדרך כלל כתובת של אותה תיבה.`n`nאפשרות א, לכל הארגון: המנהל פותח את הקישור, נכנס עם חשבון מנהל ולוחץ Accept (דף ריק אחרי האישור תקין):`n$(Get-AdminConsentUrl)`n`nאפשרות ב, רק לחשבון אחד (Microsoft Graph PowerShell, מנהל):`n" + $perUser
 }
 
 function Tool-Check($a) {
@@ -712,6 +735,104 @@ function Tool-CalendarCancel($a) {
   return "האירוע בוטל: $($e.subject)"
 }
 
+$ContactFields = 'id,displayName,givenName,surname,emailAddresses,mobilePhone,businessPhones,homePhones,companyName,jobTitle,personalNotes'
+$ContactsNotAllowed = 'CONTACTS_NOT_ALLOWED: החיבור נוצר לפני שנוספו אנשי קשר, ולכן עוד לא אושרה גישה אליהם. צריך להיכנס שוב פעם אחת (ms_sign_in ואז ms_sign_in_complete) ולאשר את ההרשאה החדשה. מייל ויומן ממשיכים לעבוד בינתיים. אם מופיע "צריך אישור מנהל": ms_admin_link.'
+
+function Invoke-Contacts($method, $path, $body = $null) {
+  Get-AccessToken | Out-Null
+  if (-not $script:ContactsAllowed) { throw $ContactsNotAllowed }
+  try { return (Invoke-Graph $method $path $body) }
+  catch {
+    if ("$($_.Exception.Message)" -match 'ErrorAccessDenied|Access is denied|403') { throw $ContactsNotAllowed }
+    throw
+  }
+}
+
+function Format-Contact($c) {
+  $phones = @()
+  $mobile = Get-Prop $c 'mobilePhone' ''
+  if ($mobile) { $phones += "נייד: $mobile" }
+  foreach ($n in @(Get-Prop $c 'businessPhones' @())) { if ($n) { $phones += "עבודה: $n" } }
+  foreach ($n in @(Get-Prop $c 'homePhones' @())) { if ($n) { $phones += "בית: $n" } }
+  return [ordered]@{
+    contact_id = $c.id; display_name = (Get-Prop $c 'displayName' ''); given_name = (Get-Prop $c 'givenName' ''); surname = (Get-Prop $c 'surname' '')
+    emails = @(@(Get-Prop $c 'emailAddresses' @()) | ForEach-Object { Get-Prop $_ 'address' '' } | Where-Object { $_ })
+    phones = $phones; company = (Get-Prop $c 'companyName' ''); job_title = (Get-Prop $c 'jobTitle' ''); notes = (Get-Prop $c 'personalNotes' '')
+  }
+}
+
+function To-ContactEmails($list) {
+  return @(@($list) | Where-Object { $_ } | ForEach-Object { $addr = ([string]$_).Trim(); @{ address = $addr; name = $addr } })
+}
+
+function Get-ContactPatch($a) {
+  $patch = @{}
+  $map = [ordered]@{ given_name = 'givenName'; surname = 'surname'; display_name = 'displayName'; mobile_phone = 'mobilePhone'; company = 'companyName'; job_title = 'jobTitle'; notes = 'personalNotes' }
+  foreach ($k in $map.Keys) { $v = Get-Prop $a $k $null; if ($null -ne $v) { $patch[$map[$k]] = ([string]$v).Trim() } }
+  $business = Get-Prop $a 'business_phone' $null
+  if ($null -ne $business) { $patch['businessPhones'] = @(@(([string]$business).Trim()) | Where-Object { $_ }) }
+  return $patch
+}
+
+function Tool-ContactsSearch($a) {
+  $query = ([string]$a.query).Trim()
+  if (-not $query) { throw 'לא נמסר מה לחפש.' }
+  $top = [Math]::Min([int](Get-Prop $a 'top' 10), 50)
+  $digits = $query -replace '\D', ''
+  # Graph has no substring search on contacts, so read the folder (up to 5,000) and match here: any part of a name, address, phone or company.
+  $found = @()
+  $url = "/me/contacts?`$top=500&`$select=$ContactFields"
+  $pages = 0
+  while ($url -and $pages -lt 10) {
+    $r = Invoke-Contacts 'GET' $url
+    foreach ($c in @($r.value)) {
+      $text = (@((Get-Prop $c 'displayName' ''), (Get-Prop $c 'givenName' ''), (Get-Prop $c 'surname' ''), (Get-Prop $c 'companyName' '')) + @(@(Get-Prop $c 'emailAddresses' @()) | ForEach-Object { Get-Prop $_ 'address' '' })) -join ' '
+      $hit = $text.IndexOf($query, [StringComparison]::OrdinalIgnoreCase) -ge 0
+      if (-not $hit -and $digits.Length -ge 6) {
+        $numbers = @((Get-Prop $c 'mobilePhone' '')) + @(Get-Prop $c 'businessPhones' @()) + @(Get-Prop $c 'homePhones' @())
+        foreach ($n in $numbers) { if ($n -and (([string]$n -replace '\D', '').Contains($digits.TrimStart('0')))) { $hit = $true } }
+      }
+      if ($hit) { $found += (Format-Contact $c) }
+    }
+    $url = Get-Prop $r '@odata.nextLink' $null
+    $pages++
+  }
+  if (-not $found.Count) { return "לא נמצא איש קשר שמתאים ל-'$query'." }
+  return @($found | Select-Object -First $top)
+}
+
+function Tool-ContactsCreate($a) {
+  $contact = Get-ContactPatch $a
+  # @() around the call: a function returning an empty or one-item array hands back $null or the item itself.
+  $emails = @(To-ContactEmails (Get-Prop $a 'emails' @()))
+  if ($emails.Count) { $contact['emailAddresses'] = $emails }
+  if (-not (Get-Prop $contact 'displayName' '')) { $contact['displayName'] = ("$(Get-Prop $contact 'givenName' '') $(Get-Prop $contact 'surname' '')").Trim() }
+  if (-not $contact['displayName'] -and $emails.Count) { $contact['displayName'] = $emails[0].address }
+  if (-not $contact['displayName']) { throw 'חסר שם או כתובת מייל לאיש הקשר.' }
+  $c = Invoke-Contacts 'POST' '/me/contacts' $contact
+  $out = Format-Contact $c
+  $out['note'] = 'איש הקשר נשמר באנשי הקשר ב-Outlook.'
+  return $out
+}
+
+function Tool-ContactsUpdate($a) {
+  $id = [string]$a.contact_id
+  $patch = Get-ContactPatch $a
+  $add = @(Get-Prop $a 'emails' @())
+  if ($add.Count) {
+    $current = Invoke-Contacts 'GET' ("/me/contacts/$id" + '?$select=emailAddresses')
+    $existing = @(@(Get-Prop $current 'emailAddresses' @()) | ForEach-Object { Get-Prop $_ 'address' '' } | Where-Object { $_ })
+    $merged = @($existing)
+    foreach ($e in $add) { $e = ([string]$e).Trim(); if ($e -and -not (@($merged | Where-Object { $_ -ieq $e }).Count)) { $merged += $e } }
+    $patch['emailAddresses'] = @(To-ContactEmails $merged)
+  }
+  if ($patch.Count -eq 0) { throw 'לא נמסר מה לשנות באיש הקשר.' }
+  $c = Invoke-Contacts 'PATCH' "/me/contacts/$id" $patch
+  $out = Format-Contact $c
+  $out['note'] = 'איש הקשר עודכן ב-Outlook.'
+  return $out
+}
+
 function Tool-OneDriveSearch($a) {
   $top = [Math]::Min([int](Get-Prop $a 'top' 20), 50)
   $q = $a.query.Replace("'", "''")
@@ -737,6 +858,7 @@ $Handlers = @{
   calendar_events = ${function:Tool-CalendarEvents}; calendar_event_read = ${function:Tool-CalendarEventRead}
   calendar_create_event = ${function:Tool-CalendarCreate}
   calendar_update_event = ${function:Tool-CalendarUpdate}; calendar_cancel_event = ${function:Tool-CalendarCancel}
+  contacts_search = ${function:Tool-ContactsSearch}; contacts_create = ${function:Tool-ContactsCreate}; contacts_update = ${function:Tool-ContactsUpdate}
   onedrive_search = ${function:Tool-OneDriveSearch}; onedrive_list = ${function:Tool-OneDriveList}
 }
 

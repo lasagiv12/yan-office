@@ -5,7 +5,7 @@ description: Reads the consultant's own monthly financial analysis workbook with
 
 # ניתוח פיננסי
 
-קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/approval-flow.md`.
+קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/approval-flow.md`, `references/hebrew-documents.md`.
 
 הניתוח הוא המודל של יאן. **אף פעם לא משנים אותו.** רק קוראים, מסכמים ומדווחים.
 

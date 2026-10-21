@@ -5,7 +5,7 @@ description: Builds and maintains a client's management dashboard in Excel from 
 
 # דשבורד ללקוח
 
-קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/approval-flow.md`.
+קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/approval-flow.md`, `references/hebrew-documents.md`.
 
 ## מה יש לכל לקוח
 - **הדשבורד:** `06 תוצרים ומצגות/דשבורד <שנה>.xlsx`. קובץ אחד לכל לקוח ושנה. יאן עובד בו ויכול לעדכן אותו בעצמו:

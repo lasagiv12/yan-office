@@ -5,7 +5,7 @@ description: Files incoming documents into the right place in a client's folder 
 
 # תיוק מסמכים
 
-קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/approval-flow.md`.
+קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/approval-flow.md`, `references/hebrew-documents.md`.
 
 ## שלבים
 1. **רשימת הקבצים:** כל מה שב-`07 לתיוק` של הלקוח, או הקובץ שצורף בשיחה.

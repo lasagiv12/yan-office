@@ -1,19 +1,19 @@
 ---
 name: mail-and-calendar
-description: Works with the consultant's Outlook mail, calendar and OneDrive through the Microsoft 365 connection - finds client emails, writes every requested email as a draft in Outlook (new or reply), sends only when allowed and approved, checks availability, schedules, moves or cancels meetings, and saves email attachments into the client folder. Also handles first-time connection setup. Use for "מה המיילים האחרונים מ...", "תרשום לי מייל", "תכתוב מייל ל...", "תנסח מייל", "תכין מייל", "תענה למייל של...", "תכין טיוטה", "מתי אני פנוי", "מה יש לי ביומן", "תקבע פגישה עם...", "תזיז את הפגישה", "תבטל את הפגישה", "תשמור את הקובץ מהמייל בתיק", "חבר את Microsoft", "התחברות ל-Outlook", "קישור לאיש המחשבים".
+description: Works with the consultant's Outlook mail, calendar, contacts and OneDrive through the Microsoft 365 connection - finds client emails, writes every requested email as a draft in Outlook (new or reply), sends only when allowed and approved, checks availability, schedules, moves or cancels meetings, finds, adds and updates Outlook contacts, and saves email attachments into the client folder. Also handles first-time connection setup. Use for "מה המיילים האחרונים מ...", "תרשום לי מייל", "תכתוב מייל ל...", "תנסח מייל", "תכין מייל", "תענה למייל של...", "תכין טיוטה", "מתי אני פנוי", "מה יש לי ביומן", "תקבע פגישה עם...", "תזיז את הפגישה", "תבטל את הפגישה", "תשמור את הקובץ מהמייל בתיק", "תוסיף איש קשר", "תיצור לי איש קשר באאוטלוק", "תשמור את ... באנשי הקשר", "מה הטלפון של...", "תעדכן את המייל של ... באנשי הקשר", "חבר את Microsoft", "התחברות ל-Outlook", "קישור לאיש המחשבים".
 ---
 
 # מייל, יומן ו-OneDrive
 
-קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/approval-flow.md`.
+קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/approval-flow.md`, `references/hebrew-documents.md`.
 
-הכלים מגיעים מחיבור Microsoft של העוזר: `ms_status`, `ms_configure`, `ms_sign_in`, `ms_sign_in_complete`, `mail_*`, `calendar_*`, `onedrive_*`. הם עובדים בשם יאן עצמו, ורק על התיבה, היומן וה-OneDrive שלו.
+הכלים מגיעים מחיבור Microsoft של העוזר: `ms_status`, `ms_configure`, `ms_sign_in`, `ms_sign_in_complete`, `mail_*`, `calendar_*`, `contacts_*`, `onedrive_*`. הם עובדים בשם יאן עצמו, ורק על התיבה, היומן, אנשי הקשר וה-OneDrive שלו.
 
 ## לפני כל שימוש
 מפעילים `ms_status`.
 - **"מחובר":** ממשיכים, ועובדים רק דרך החיבור הזה. לא משתמשים בחיבור המובנה ל-Outlook, ולא מבקשים לחבר אותו מחדש.
 - **"עוד לא נכנסו":** לא מבקשים שום מזהה. אם יש חיבור מובנה ל-Outlook שעובד, עונים קודם דרכו על בקשת קריאה, ומציעים להתחבר כדי לאפשר גם טיוטות ויומן. כדי להתחבר עוברים להתחברות ראשונה.
-- **אין כלים כאלה בכלל** (החיבור לא מותקן בגרסה הזו או במחשב הזה): משתמשים בחיבור המובנה ל-Outlook אם יש, לקריאה בלבד. אומרים מה לא אפשרי. לא מאלתרים.
+- **אין כלים כאלה בכלל** (החיבור לא מותקן בגרסה הזו או במחשב הזה): משתמשים בחיבור המובנה ל-Outlook אם יש, לקריאה בלבד. אומרים מה לא אפשרי (טיוטה, אירוע או איש קשר לא נוצרים). לא מאלתרים.
 
 ## החיבור נשמר
 הכניסה נשמרת במחשב ומתחדשת לבד. מתחברים מחדש **רק** כשכלי מחזיר `NOT_SIGNED_IN` או `SIGN_IN_EXPIRED`.
@@ -67,11 +67,21 @@ description: Works with the consultant's Outlook mail, calendar and OneDrive thr
 - **הזזה או ביטול:** מאתרים את האירוע (`calendar_events` עם `query`), מציגים מה ישתנה ומי יקבל הודעה. אחרי אישור: `calendar_update_event` או `calendar_cancel_event` עם `confirmed=true`.
 - **אזור זמן:** שעון ישראל.
 
+## אנשי קשר
+- **"מה הטלפון של...", "יש לי את ... באנשי הקשר?":** `contacts_search` עם חלק מהשם, מהמייל, מהטלפון או מהחברה.
+- **איש קשר חדש** ("תוסיף איש קשר", "תשמור את ... באנשי הקשר"):
+  1. **מה צריך:** שם, ולפחות מייל או טלפון. חברה, תפקיד והערה אם נאמרו. פרטים שלא נאמרו אפשר לקחת מ-`tblClients` באינדקס או מהחתימה במייל של אותו אדם, ואומרים מאיפה לקחו. לא ממציאים.
+  2. **בודקים כפילות:** `contacts_search` לפי המייל, ואם אין מייל, לפי השם. אם יש כבר איש קשר כזה, מציגים אותו ושואלים אם לעדכן אותו במקום ליצור חדש.
+  3. `contacts_create`. זה לא מגיע לאף אחד, ולכן לא צריך אישור נוסף אחרי שביקשו.
+  4. **בתשובה:** השם והפרטים כפי שהכלי החזיר, ו"נשמר באנשי הקשר ב-Outlook". רק אם הכלי החזיר `contact_id`. אם הוא נכשל, אומרים שאיש הקשר **לא** נשמר ולמה.
+- **עדכון** ("תוסיף לו את הנייד", "תעדכן את המייל של..."): `contacts_search`, ואז `contacts_update` עם מה שמשתנה. מייל נוסף מתווסף לקיימים. טלפון והערה מחליפים את הקודמים, ולכן מציגים קודם מה יוחלף.
+- **`CONTACTS_NOT_ALLOWED`:** החיבור נוצר לפני שהעוזר קיבל גישה לאנשי קשר. אומרים בשורה אחת שצריך להיכנס שוב פעם אחת כדי לאשר גישה לאנשי הקשר, ושמייל ויומן ממשיכים לעבוד. אם יאן מסכים: `ms_sign_in`, ואז `ms_sign_in_complete`, ומנסים שוב. אם מופיע "צריך אישור מנהל", כמו בהתחברות ראשונה. עד אז נותנים את הפרטים מסודרים להוספה ידנית, ואומרים במפורש שלא נשמר כלום.
+
 ## OneDrive
 - **קבצים במחשב:** קבצי הלקוחות נקראים ונכתבים דרך התיקייה המסונכרנת במחשב, כמו בכל הסקילים.
 - **בענן:** `onedrive_search` ו-`onedrive_list` מיועדים לחיפוש בענן, למשל קובץ שלא נמצא בתיקייה המקומית או מסמך שמישהו שיתף. הם קוראים בלבד.
 
 ## אסור
 - **שליחה, הזמנה, עדכון או ביטול** שמגיעים לאנשים אחרים, בלי אישור מפורש לאותה פעולה בדיוק.
-- **מחיקת מיילים.** אין לזה כלי, וגם לא מחפשים דרך עוקפת.
+- **מחיקת מיילים או אנשי קשר.** אין לזה כלי, וגם לא מחפשים דרך עוקפת.
 - **פעולה בתיבה או ביומן של מישהו אחר.**
