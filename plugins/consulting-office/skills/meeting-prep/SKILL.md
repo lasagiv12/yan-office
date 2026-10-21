@@ -1,13 +1,13 @@
 ---
 name: meeting-prep
-description: Prepares the consultant for a client meeting. For a follow-up meeting - adds a dated chapter at the top of the client's meeting document that opens with what he does in the meeting, in yellow boxes (recurring tasks, the client's one-time tasks and his own tasks, each in a table with a yellow column to tick what was done, then yellow boxes to write what came up), followed by reading material at the end (summaries of previous meetings, and on request the prep: what is waiting to go into the client file, latest numbers, emails, questions, suggestions). For a first meeting with a new client - creates the first-meeting document (personal background, the business, challenges, work plan, tasks). Surfaces earlier meeting notes that never reached the client file and offers to file them. Also opens a meeting without prep. Use for "תכין אותי לפגישה עם...", "הכנה לפגישה", "תפתח לי פגישה עם...", "פגישה ראשונה עם...", "מה סוכם בפגישה הקודמת ומה עדיין פתוח", "תכין אותי לפגישות של מחר".
+description: Prepares the consultant for a client meeting. For a follow-up meeting - adds a dated chapter at the top of the client's meeting document that opens with the tasks he ticks (recurring tasks, the client's one-time tasks and his own tasks, each in a table with a yellow column to tick what was done), then reading material (on request the prep: what is waiting to go into the client file, latest numbers, emails, questions, suggestions; then summaries of previous meetings), and ends with yellow boxes to write what came up. For a first meeting with a new client - creates the first-meeting document (personal background, the business, challenges, work plan, tasks). Surfaces earlier meeting notes that never reached the client file and offers to file them. Also opens a meeting without prep. Use for "תכין אותי לפגישה עם...", "הכנה לפגישה", "תפתח לי פגישה עם...", "פגישה ראשונה עם...", "מה סוכם בפגישה הקודמת ומה עדיין פתוח", "תכין אותי לפגישות של מחר".
 ---
 
 # הכנה לפגישה
 
 קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/meetings-doc.md`, `references/approval-flow.md`, `references/hebrew-documents.md`.
 
-המטרה: כשיאן מגיע לפגישה, הוא פותח קובץ אחד ויודע מיד מה לעשות: למעלה התאריך ומשבצת שאומרת מה עושים, אחר כך המשימות מהפגישות הקודמות עם עמודה צהובה לסמן V, ואחר כך משבצות צהובות לכתוב מה עלה. כל מה שלקריאה (מה שהעוזר הכין) בסוף הפרק.
+המטרה: כשיאן מגיע לפגישה, הוא פותח קובץ אחד ויודע מיד מה לעשות: למעלה התאריך ומשבצת שאומרת מה עושים, אחר כך המשימות מהפגישות הקודמות עם עמודה צהובה לסמן V, אחר כך מה שלקריאה (ההכנה שהעוזר הכין, וסיכומי הפגישות הקודמות), ובסוף הפרק משבצות צהובות לכתוב מה עלה.
 
 ## 1. איזו פגישה
 - **מהיומן:** הפגישה הבאה עם הלקוח (`calendar_events`), כולל שעה, מקום ומשתתפים.
@@ -40,16 +40,10 @@ description: Prepares the consultant for a client meeting. For a follow-up meeti
 **בשאר הפרק** מתייחסים לנקודות האלה כאילו הן כבר בתיק, ומסמנים אותן "(עוד לא בתיק)". כך משימה שסומנה V בפגישה הקודמת מופיעה ב"בוצעו מאז הפגישה הקודמת", ומשימה חדשה מופיעה בטבלה, גם לפני שאושרו.
 
 ## 4. מבנה הפרק
-לפי `meetings-doc.md` ("מסמך פגישות ההמשך"). העיקרון: בראש הפרק רק מה שיאן עושה בפגישה, במשבצות צהובות. כל מה שלקריאה בסוף, בתכלת. בסדר הזה:
+לפי `meetings-doc.md` ("מסמך פגישות ההמשך"). העיקרון: בראש הפרק המשימות לסימון, באמצע מה שלקריאה (בתכלת), ובסוף המקום לכתוב מה עלה. בסדר הזה:
 1. **כותרת, סטטוס, ומשבצת ההוראה** בשורה אחת.
 2. **① מה בוצע מאז הפגישה הקודמת:** שלוש הטבלאות, בדיוק לפי `meetings-doc.md`: כל משימה פתוחה פעם אחת, עמודת ✓ ריקה וצהובה.
-3. **② מה עלה בפגישה:** טבלת הכתיבה, עם משבצות ריקות.
-4. **לקריאה: מהפגישות הקודמות:**
-   - תאריך, שעה, מקום, משתתפים.
-   - "הפגישה הקודמת: <תאריך> · הושלמו N מתוך M (P%), נשארו K, מהן L באיחור", לפי "התקדמות במשימות" ב-`client-file-schema.md`, כולל מה שעוד לא בתיק.
-   - בוצעו מאז הפגישה הקודמת (של הלקוח, ושל יאן).
-   - סיכומי הפגישות הקודמות.
-5. **לקריאה: הכנה לפגישה** (רק ב"תכין אותי"):
+3. **לקריאה: הכנה לפגישה** (רק ב"תכין אותי"):
    1. **טרם עודכן בתיק:** רק אם יש.
    2. **המספרים האחרונים:** 3 עד 5 מדדים, עם השינוי מהחודש הקודם ומקור לכל מספר. כולל התקדמות מול היעדים ב-`tblGoals`.
    3. **מהמייל מאז הפגישה הקודמת:** מה הלקוח כתב, ומה מחכה לתשובה.
@@ -61,6 +55,12 @@ description: Prepares the consultant for a client meeting. For a follow-up meeti
       - סתירות שצריך להכריע בהן.
    6. **הצעות העוזר:** בנפרד ממה שכתוב בתיק. כל הצעה עם הסיבה שלה.
    7. **חומרים:** נתיבים לקבצים בתיק. לא מעתיקים.
+4. **לקריאה: מהפגישות הקודמות:**
+   - תאריך, שעה, מקום, משתתפים.
+   - "הפגישה הקודמת: <תאריך> · הושלמו N מתוך M (P%), נשארו K, מהן L באיחור", לפי "התקדמות במשימות" ב-`client-file-schema.md`, כולל מה שעוד לא בתיק.
+   - בוצעו מאז הפגישה הקודמת (של הלקוח, ושל יאן).
+   - סיכומי הפגישות הקודמות.
+5. **② מה עלה בפגישה:** טבלת הכתיבה, עם משבצות ריקות. תמיד אחרונה בפרק.
 
 **ההכנה קצרה:** עד עמוד אחד, ועד 6 שורות בכל כותרת. אם יש יותר, הדחוף קודם, ושורה "ועוד X". הטבלאות לא מתקצרות, כי בהן מסמנים: כל משימה פתוחה נכנסת.
 
@@ -75,7 +75,7 @@ description: Prepares the consultant for a client meeting. For a follow-up meeti
 - **המסמך נפתח לבד:** מיד אחרי הכתיבה פותחים אותו ב-Word, בלי לשאול (`meetings-doc.md`, שלב 7). אם הוא לא נפתח, אומרים את זה ונותנים קישור.
 - **תקציר של כמה שורות:** מה הכי חשוב לדעת לפני הפגישה, וקישור למסמך.
 - **אם יש פגישות שמחכות לתיק:** "ההערות מ-<תאריך> עוד לא עברו לתיק: <ספירה>. לעדכן עכשיו?" אם יאן מאשר, ממשיכים לפי הסקיל `meeting-summary` (מסעיף 3). ההצעה המלאה מוצגת, ונכתבת רק אחרי אישור. אחרי הכתיבה מעדכנים בפרק את "טרם עודכן בתיק".
-- **תזכורת:** "בפגישה כותבים רק בצהוב: V ליד מה שבוצע, ומה עלה במשבצות. ההכנה בסוף הפרק. אחרי הפגישה: 'תעדכן בתיק את הפגישה עם <לקוח>'."
+- **תזכורת:** "בפגישה כותבים רק בצהוב: V ליד מה שבוצע, ובסוף הפרק מה עלה במשבצות. ההכנה באמצע, בין המשימות למשבצות. אחרי הפגישה: 'תעדכן בתיק את הפגישה עם <לקוח>'."
 
 ## 7. פגישה ראשונה
 1. **המסמך:** `02 פגישות/פגישה ראשונה – <לקוח>.docx`. אם אין, יוצרים מהתבנית `מסמך פגישה ראשונה.docx` (לפי `meetings-doc.md`). בכותרת: `פגישה ראשונה <תאריך>`. מתחת: שורת הסטטוס, שורה עם התאריך, השעה, המקום והמשתתפים, ומשבצת ההוראה.
@@ -96,8 +96,9 @@ description: Prepares the consultant for a client meeting. For a follow-up meeti
 2. **פגישת המשך:** מוסיפים פרק בלי "לקריאה: הכנה לפגישה":
    - הכותרת: `פגישה <תאריך> · <נושא>`. התאריך הוא היום, אלא אם נאמר אחר. הנושא מהיומן, אם יש.
    - שורת הסטטוס ומשבצת ההוראה.
-   - ①, כי בו מסמנים, ו-② עם משבצות ריקות.
+   - ①, כי בו מסמנים.
    - "לקריאה: מהפגישות הקודמות".
+   - ② עם משבצות ריקות, בסוף.
 3. **פגישה ראשונה:** מסמך הפגישה הראשונה, בלי "לקריאה: מה ידוע לפני הפגישה".
 4. **פותחים את המסמך** ב-Word, בלי לשאול, כמו בסעיף 6.
 5. **בשיחה:** שורה אחת וקישור למסמך. אם יש משהו דחוף, מוסיפים עד שתי שורות. דחוף הוא פגישה שמחכה לתיק, סתירה, או משימה של יאן באיחור.
