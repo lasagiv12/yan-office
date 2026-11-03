@@ -5,7 +5,7 @@ description: Brings an existing client of the consultant into the system - build
 
 # קליטת לקוח קיים
 
-קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/meetings-doc.md`, `references/approval-flow.md`, `references/hebrew-documents.md`.
+קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/meetings-doc.md`, `references/meeting-filing.md`, `references/approval-flow.md`, `references/hebrew-documents.md`.
 
 המטרה: לקוח שיאן כבר עובד איתו מקבל תיק במבנה הקבוע, עם כל מה שכבר קיים: מסמכים, משימות, מספרים והיסטוריית פגישות. בלי לאבד שום דבר ובלי לשנות את תוכן הקבצים המקוריים.
 
@@ -81,7 +81,7 @@ description: Brings an existing client of the consultant into the system - build
 - **ב-Outlook לא משנים כלום.**
 
 ### ג. מה עובר לתיק (אישור שני)
-מסווגים את כל הפגישות שיובאו לפי הסקיל `meeting-summary` (סעיף 3), מהישנה לחדשה, כך שמה שנסגר בפגישה מאוחרת נסגר גם בתיק. **מציעים רק מה שעדיין רלוונטי:**
+מסווגים את כל הפגישות שיובאו לפי `meeting-filing.md` ("סיווג"), מהישנה לחדשה, כך שמה שנסגר בפגישה מאוחרת נסגר גם בתיק. **מציעים רק מה שעדיין רלוונטי:**
 - **משימות שעדיין פתוחות.** משימות שנסגרו בפגישה מאוחרת יותר נכנסות כבוצעו, רק משלוש הפגישות האחרונות.
 - **החלטות ועקרונות** שעדיין בתוקף.
 - **נושאים פתוחים** שלא נסגרו.
