@@ -1,9 +1,10 @@
 {
   "profile_id": "yan",
   "consultant_name": "יאן",
+  "developer_name": "שגיב",
   "practice": "ייעוץ עסקי וגישור",
   "language": "he",
-  "date_format": "DD/MM/YYYY",
+  "date_format": "YYYY/MM/DD",
   "currency": "₪",
   "vat_rate": 0.18,
   "clients_root": "לקוחות",

@@ -15,7 +15,7 @@ description: Prepares a price quote on the consultant's own designed form (logo,
 | פרט | מאיפה |
 |---|---|
 | **לכבוד** | אם יש תיק: "שם העסק" מ-`01 פרופיל לקוח.docx`, ו"איש קשר" מהאינדקס: `<שם העסק>, לידי <איש קשר>`. אם אין תיק: השם שיאן אמר |
-| **תאריך** | היום, בפורמט DD/MM/YYYY |
+| **תאריך** | היום, בפורמט YYYY/MM/DD |
 | **מחיר לשעה** | רק מיאן. אם הוא לא אמר: קודם בודקים הצעה קודמת לאותו לקוח ב-`06 תוצרים ומצגות/`, ושואלים "כמו בפעם הקודמת, <מחיר> לשעה?". אחרת שואלים |
 | **מחיר חודשי** | רק אם יאן אמר. אם לא, הנוסח שבטופס נשאר: "מחיר חודשי לסיכום מראש" |
 | **מספר פגישות בחודש** | רק אם יאן אמר. אם לא, נשאר המספר שבטופס |
@@ -30,7 +30,7 @@ description: Prepares a price quote on the consultant's own designed form (logo,
 הכלי: `scripts/fill_document.py` בתיקיית הסקיל, עם Python (`python` או `py` ב-Windows). הוא לא צריך שום ספרייה, ממלא רק את המקומות הריקים, ועובר בעצמו תיקון ובדיקה של כיוון. לא בונים את המסמך בדרך אחרת ולא פותחים אותו בספרייה אחרת.
 
 ```
-python scripts/fill_document.py quote "assets/הצעת מחיר.docx" "<קובץ היעד>" --to "<לכבוד>" --date <DD/MM/YYYY> --hourly <מחיר>
+python scripts/fill_document.py quote "assets/הצעת מחיר.docx" "<קובץ היעד>" --to "<לכבוד>" --date <YYYY/MM/DD> --hourly <מחיר>
 ```
 
 אפשרויות, רק כשצריך: `--monthly <מחיר>`, `--meetings <מספר>`, `--drop hourly` או `--drop monthly`, `--service ייעוץ` או `--service גישור`.

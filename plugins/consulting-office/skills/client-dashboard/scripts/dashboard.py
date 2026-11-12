@@ -463,7 +463,7 @@ def build_dashboard_sheet(wb, data, d, col, end, cache):
     text("B2", f"דשבורד ניהולי {data.get('year', '')} | {data['client']}", 22, True, INK)
     ws.row_dimensions[2].height = 34
     ws.merge_cells("B3:Q3")
-    updated = dt.date.fromisoformat(data["updated"]).strftime("%d/%m/%Y") if data.get("updated") else ""
+    updated = dt.date.fromisoformat(data["updated"]).strftime("%Y/%m/%d") if data.get("updated") else ""
     text("B3", f"{d['period']} · {months_count(n)} · עודכן {updated} · הוכן על ידי {data.get('consultant', '')}", 11, color=INK2)
 
     av = d["avg"]
@@ -1017,7 +1017,7 @@ def grid(cards_html, count):
 def build_html(data, d, path):
     L, act, rows, n = data["labels"], data["activity"], d["rows"], d["n"]
     items, groups = act["items"], data["expense_groups"]
-    updated = dt.date.fromisoformat(data["updated"]).strftime("%d.%m.%Y") if data.get("updated") else ""
+    updated = dt.date.fromisoformat(data["updated"]).strftime("%Y/%m/%d") if data.get("updated") else ""
     av, fc = d["avg"], d["forecast"]
     loss = lambda v: '<span class="tag loss">הפסד</span>' if v < 0 else ""
     per = f"ממוצע לחודש, לפי {months_count(n)}"

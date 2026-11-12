@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Fill the consultant's designed Word forms: only the blanks change, everything else stays byte for byte.
 
-    python fill_document.py quote  <template> <out> --to "<name>" --date 03/11/2026 --hourly 450
+    python fill_document.py quote  <template> <out> --to "<name>" --date 2026/11/03 --hourly 450
                                    [--monthly 12000] [--meetings 4] [--drop hourly|monthly] [--service ייעוץ|גישור]
-    python fill_document.py demand <template> <out> --to "<name>" --date 03/11/2026 --period "אוקטובר 2026"
+    python fill_document.py demand <template> <out> --to "<name>" --date 2026/11/03 --period "אוקטובר 2026"
                                    --amount 4500 --vat 18 --account 123456
 
 The amount is before VAT; the total is worked out here. The file is written only if every blank was filled, then
