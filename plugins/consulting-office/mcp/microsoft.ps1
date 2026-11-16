@@ -23,7 +23,7 @@ $StdOut.AutoFlush = $true
 # Windows PowerShell 5.1 can serialize arrays as {"value":[...],"Count":n} because of this type data.
 Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue
 
-$ServerVersion = '0.10.0'
+$ServerVersion = '0.10.2'
 $TimeZone = 'Israel Standard Time'
 $Graph = 'https://graph.microsoft.com/v1.0'
 $DataDir = Join-Path $env:APPDATA 'ConsultingOffice'
@@ -292,7 +292,7 @@ $Tools = @(
      description = 'Waits (up to about 45 seconds) for the user to finish the sign-in started by ms_sign_in and stores the credentials securely on this computer.'
      props = @{}; required = @() },
   @{ name = 'mail_search'; title = 'חיפוש מיילים'; readOnly = $true
-     description = 'Searches the signed-in mailbox (all folders, including sent mail). Use from (sender address or domain, e.g. a client domain from the client index), to (recipient address or domain, for mail the user sent), query (free text: words from the subject, body or attachment names), since/until (YYYY-MM-DD). Returns newest first.'
+     description = 'Searches the signed-in mailbox (all folders, including sent mail). Use from (sender address or domain, e.g. a client domain from the client index), to (recipient address or domain, for mail the user sent), query (free text: words from the subject, body or attachment names), since/until (YYYY-MM-DD; YYYY/MM/DD and DD/MM/YYYY are accepted too). Returns newest first.'
      props = @{ query = @{ type = 'string' }; from = @{ type = 'string' }; to = @{ type = 'string' }; since = @{ type = 'string' }; until = @{ type = 'string' }; top = @{ type = 'integer' } }; required = @() },
   @{ name = 'mail_read'; title = 'קריאת מייל'; readOnly = $true
      description = 'Returns the full plain-text body and recipients of one message.'
@@ -313,7 +313,7 @@ $Tools = @(
      description = 'Sends an existing draft. Works only if sending was enabled in ms_configure (allow_send) and only with confirmed=true after the user approved sending this exact draft.'
      props = @{ draft_id = @{ type = 'string' }; confirmed = @{ type = 'boolean' } }; required = @('draft_id', 'confirmed') },
   @{ name = 'calendar_events'; title = 'אירועים ביומן'; readOnly = $true
-     description = 'Lists calendar events between start and end (YYYY-MM-DD or YYYY-MM-DDTHH:MM, Israel time). Optional query keeps events whose subject, location, organizer or attendee names and addresses contain the text (a client name, a person, or a client email domain). Use it to answer what is scheduled, when the next or last meeting with someone is, and when the user is free.'
+     description = 'Lists calendar events between start and end (YYYY-MM-DD or YYYY-MM-DDTHH:MM, Israel time; YYYY/MM/DD and DD/MM/YYYY are accepted too). Optional query keeps events whose subject, location, organizer or attendee names and addresses contain the text (a client name, a person, or a client email domain). Use it to answer what is scheduled, when the next or last meeting with someone is, and when the user is free.'
      props = @{ start = @{ type = 'string' }; end = @{ type = 'string' }; query = @{ type = 'string' } }; required = @('start', 'end') },
   @{ name = 'calendar_event_read'; title = 'קריאת אירוע'; readOnly = $true
      description = 'Returns one calendar event with its full plain-text notes (the consultant writes meeting notes inside the event). Use it to bring past meeting notes into the client file.'
@@ -350,7 +350,25 @@ $Tools = @(
 # Documents only: file_open must never start a program or a script.
 $OpenableTypes = @('.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt', '.pdf', '.html', '.htm')
 
+# Dates reach the tools in more than one order: the consultant reads YYYY/MM/DD in his documents (0.10) and types
+# DD/MM/YYYY in Israel. Graph only takes ISO, so every date becomes YYYY-MM-DD (with THH:MM if a time was given).
+function Normalize-Date($text) {
+  if (-not $text) { return $text }
+  $t = "$text".Trim()
+  if ($t -match '^(\d{4})[/.\-](\d{1,2})[/.\-](\d{1,2})(?:[T ](\d{1,2}):(\d{2}))?$') {
+    $y, $m, $d = $Matches[1], [int]$Matches[2], [int]$Matches[3]
+  } elseif ($t -match '^(\d{1,2})[/.](\d{1,2})[/.](\d{4})(?:[T ](\d{1,2}):(\d{2}))?$') {
+    $y, $m, $d = $Matches[3], [int]$Matches[2], [int]$Matches[1]
+  } else {
+    return $t
+  }
+  $out = '{0}-{1:D2}-{2:D2}' -f $y, $m, $d
+  if ($Matches[4]) { $out += 'T{0:D2}:{1}' -f [int]$Matches[4], $Matches[5] }
+  return $out
+}
+
 function To-DateTime($text, $endOfDay) {
+  $text = Normalize-Date $text
   if ($text -match '^\d{4}-\d{2}-\d{2}$') { return $text + $(if ($endOfDay) { 'T23:59:59' } else { 'T00:00:00' }) }
   if ($text -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$') { return "$($text):00" }
   return $text
@@ -582,8 +600,8 @@ function Tool-MailSearch($a) {
   $query = Get-Prop $a 'query' ''
   $from = Get-Prop $a 'from' ''
   $to = Get-Prop $a 'to' ''
-  $since = Get-Prop $a 'since' ''
-  $until = Get-Prop $a 'until' ''
+  $since = Normalize-Date (Get-Prop $a 'since' '')
+  $until = Normalize-Date (Get-Prop $a 'until' '')
   if ($query -or $to -or ($from -and -not $from.Contains('@'))) {
     # $search cannot be combined with $filter/$orderby, so sender, recipient, domain and dates go into the KQL query.
     $kql = $query
@@ -940,6 +958,11 @@ while ($true) {
       }
       'ping' { Send-Message @{ jsonrpc = '2.0'; id = $msg.id; result = @{} } }
       'tools/list' { Send-Message @{ jsonrpc = '2.0'; id = $msg.id; result = @{ tools = @(Tool-List) } } }
+      # ChatGPT asks every server for resources and prompts, even one that declares only tools. "Method not found"
+      # here showed up in Yan's ChatGPT log while none of our tools reached the chat (16/11), so answer with empty lists.
+      'resources/list' { Send-Message @{ jsonrpc = '2.0'; id = $msg.id; result = @{ resources = @() } } }
+      'resources/templates/list' { Send-Message @{ jsonrpc = '2.0'; id = $msg.id; result = @{ resourceTemplates = @() } } }
+      'prompts/list' { Send-Message @{ jsonrpc = '2.0'; id = $msg.id; result = @{ prompts = @() } } }
       'tools/call' {
         $name = $msg.params.name
         $toolArgs = Get-Prop $msg.params 'arguments' ([pscustomobject]@{})
