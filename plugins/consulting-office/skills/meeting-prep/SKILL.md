@@ -1,13 +1,13 @@
 ---
 name: meeting-prep
-description: Prepares the consultant for a client meeting. First files by itself into the client file whatever he wrote in earlier meetings. Then gives the prep in the conversation and creates a new document for this meeting in his design: client, date and participants at the top; tables to tick (the previous meeting in short points, the tasks, and topics still open plus new ones to move forward with), reading material, and yellow boxes at the end to write what came up. For a first meeting with a new client - the first-meeting document. Also opens a meeting without prep. Use for "תכין אותי לפגישה עם...", "הכנה לפגישה", "תפתח לי פגישה עם...", "פגישה ראשונה עם...", "מה סוכם בפגישה הקודמת ומה עדיין פתוח", "תכין אותי לפגישות של מחר".
+description: Prepares the consultant for a client meeting. First files by itself into the client file whatever he wrote in earlier meetings. Then creates a new document for this meeting in his design, and the prep goes into that document, not into the chat: client, date and participants at the top; tables to tick (the previous meeting in short points, the tasks, and topics still open plus new ones to move forward with), reading material, and yellow boxes at the end to write what came up. For a first meeting with a new client - the first-meeting document. Also opens a meeting without prep. Use for "תכין אותי לפגישה עם...", "הכנה לפגישה", "תפתח לי פגישה עם...", "פגישה ראשונה עם...", "מה סוכם בפגישה הקודמת ומה עדיין פתוח", "תכין אותי לפגישות של מחר".
 ---
 
 # הכנה לפגישה
 
 קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/meetings-doc.md`, `references/meeting-filing.md`, `references/approval-flow.md`, `references/hebrew-documents.md`.
 
-יאן מבקש הכנה ומקבל שני דברים: **ההכנה בשיחה**, ו**מסמך לפגישה** שנפתח לו ב-Word. הכל ענייני: מה בוצע, מה נשאר, אצל מי, ומה על הפרק. היסטוריה של פגישה אחרי פגישה לא נכנסת.
+יאן מבקש הכנה ומקבל **מסמך לפגישה** שנפתח לו ב-Word, וההכנה כולה בתוכו. **ההכנה לא נכתבת בשיחה:** בשיחה רק שורה שהמסמך מוכן, מה דחוף, ומה עודכן בתיק (סעיף 6). הכל ענייני: מה בוצע, מה נשאר, אצל מי, ומה על הפרק. היסטוריה של פגישה אחרי פגישה לא נכנסת.
 
 ## 1. איזו פגישה
 - **מהיומן:** הפגישה הבאה עם הלקוח (`calendar_events`), כולל שעה, מקום ומשתתפים.
@@ -51,13 +51,10 @@ description: Prepares the consultant for a client meeting. First files by itself
 - **אם כבר יש מסמך לאותו תאריך** (למשל הכנה שנעשתה אתמול): מעדכנים אותו, בלי ליצור עוד אחד. משתנים רק הטבלאות של ① עד ③ וחלקי "לקריאה". סימון שיאן כבר כתב בעמודת "בוצע" או "טופל" עובר לאותה שורה, והמשבצות של ④ לא משתנות. אומרים בשורה שעדכנת מסמך קיים.
 - **לקוח קיים עם היסטוריה ב-Outlook, שעוד לא סודרה:** מציעים בשורה לסדר אותה (`client-onboarding`, "היסטוריה מהיומן").
 
-## 6. בשיחה
-- **ההכנה:** עניינית, בכותרות קצרות:
-  - **איפה עומדים:** סיכום של הלקוח נכון להיום.
-  - **מה בוצע מאז הפגישה הקודמת.**
-  - **מה נשאר ואצל מי:** הבאיחור קודם, עם יעד.
-  - **על הפרק:** מה נקבע לפגישה הזו, מה צריך להחליט, ומה חדש במספרים ובמייל.
-  - **במה להתקדם:** הנושאים החדשים של ③, כל אחד בשורה.
+## 6. בשיחה: קצר, ההכנה במסמך
+- **לא כותבים את ההכנה בשיחה.** לא סיכום, לא טבלאות ולא רשימת משימות: כל זה במסמך (סעיף 4). גם אם יאן כתב "תכין אותי", התשובה היא המסמך.
+- **השורה הראשונה:** "המסמך לפגישה עם <לקוח> ב-<YYYY/MM/DD> מוכן ונפתח" (או, אם לא נפתח, הנתיב המלא בתיקיית הלקוח).
+- **דחוף, עד שתי שורות, רק אם יש:** משימה באיחור, סתירה שצריך להכריע בה, או משהו שחסר כדי להתכונן.
 - **המסמך:** נפתח מיד ב-Word, בלי לשאול (`meetings-doc.md`, שלב 6; אם אין כלי לפתיחה, בפקודה במחשב לפי `data-access.md`). אם לא נפתח, אומרים ונותנים את הנתיב המלא בתיקיית הלקוח.
 - **לפני שעונים, בודקים:** הקובץ קיים בנתיב `02 פגישות/<YYYY-MM-DD> פגישה – <לקוח>.docx`, נבנה מהתבנית, בדיקת הכיוון החזירה ✓, והוא נפתח. אם משהו מאלה לא קרה, אומרים מה, במפורש.
 - **תזכורת בשורה:** "בפגישה כותבים רק בצהוב: בוצע ליד מה שבוצע בטבלאות, ובסוף המסמך מה עלה במשבצות. מה שלא סומן עובר לפגישה הבאה. אחרי הפגישה לא צריך לעשות כלום."
@@ -68,7 +65,7 @@ description: Prepares the consultant for a client meeting. First files by itself
 2. **טבלת הכתיבה:** רקע אישי קצר · תיאור העסק · אתגרים בעסק · תוכנית עבודה · משימות ללקוח · המשימות שלי · הערות. משבצות צהובות ריקות. אין בה משימות קודמות ואין סיכום של פגישה קודמת: זו הפגישה הראשונה.
 3. **"לקריאה: מה ידוע לפני הפגישה"** (רק ב"תכין אותי"), אחרי הטבלה: מה שכבר ידוע מהאינדקס, מהפרופיל, ממיילים של הלקוח וממסמכים ב-`07 לתיוק`, ועד 3 שאלות מומלצות לפגישה, למשל מה חסר בפרופיל. אם לא ידוע כלום, לא מוסיפים את החלק.
 4. **פותחים את המסמך** ב-Word, בלי לשאול, כמו בסעיף 6.
-5. **בשיחה:** ההכנה, אם יש מה לומר, וקישור. "בפגישה כותבים במשבצות הצהובות, בנקודות קצרות. אחרי הפגישה לא צריך לעשות כלום."
+5. **בשיחה:** שורה שהמסמך מוכן ונפתח (ההכנה עצמה במסמך, ב"לקריאה: מה ידוע לפני הפגישה", לא בשיחה), ו"בפגישה כותבים במשבצות הצהובות, בנקודות קצרות. אחרי הפגישה לא צריך לעשות כלום."
 
 ## כללים
 - **חלק בלי מידע:** כתוב בו "אין". לא ממלאים בניחוש.
