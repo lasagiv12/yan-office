@@ -1,4 +1,4 @@
-﻿# Microsoft 365 connector for the consulting-office plugin: an MCP server over stdio.
+﻿﻿# Microsoft 365 connector for the consulting-office plugin: an MCP server over stdio.
 # Mail (search, read, attachments, drafts, send when allowed), calendar (read, create, update,
 # cancel), contacts (search, create, update) and OneDrive (search, list) through Microsoft Graph, signed in as the consultant himself
 # (device code or browser sign-in with PKCE, delegated permissions only, no client secret).
@@ -6,8 +6,8 @@
 # Runs on Windows PowerShell 5.1, which ships with Windows, so nothing has to be installed.
 # Config and the refresh token live in %APPDATA%\ConsultingOffice; the token is encrypted with
 # Windows DPAPI for the current user. stdout carries JSON-RPC only; diagnostics go to stderr.
-# file_open opens a document the assistant just made (a meeting document, for example) in its default
-# app on this computer, so the consultant does not have to look for it.
+# file_open checks a document on this computer and returns the lines that let the consultant open it himself
+# with one click (a file-card line that shows a card with Open in). It never starts a program: from the sandbox nothing reaches his screen.
 # Every write action that reaches other people (send, invitations, cancellations) requires
 # confirmed=true, which the skills set only after the user approved that exact action.
 
@@ -23,7 +23,7 @@ $StdOut.AutoFlush = $true
 # Windows PowerShell 5.1 can serialize arrays as {"value":[...],"Count":n} because of this type data.
 Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue
 
-$ServerVersion = '0.10.6'
+$ServerVersion = '0.10.7'
 $TimeZone = 'Israel Standard Time'
 $Graph = 'https://graph.microsoft.com/v1.0'
 $DataDir = Join-Path $env:APPDATA 'ConsultingOffice'
@@ -343,7 +343,7 @@ $Tools = @(
      description = 'Lists a OneDrive folder in the cloud (path relative to the OneDrive root, empty for the root).'
      props = @{ path = @{ type = 'string' } }; required = @() },
   @{ name = 'file_open'; title = 'פתיחת מסמך'; readOnly = $true
-     description = 'Opens a document on this computer in its default app (Word, Excel, PowerPoint, PDF reader or browser), the way double-clicking it would. Use it right after creating or adding to a meeting document, without asking. path is the full local path. Only documents: docx, doc, xlsx, xls, pptx, ppt, pdf, html, htm. Nothing is changed in the file.'
+     description = 'Checks that a document exists on this computer and returns the three lines to end the reply with, word for word: how to open it, its folder, and a file-card line that makes a card with Open in appear under the reply, from which the consultant opens the original file in the app he picks. It does not open a window: programs started from here do not reach his screen. Use it whenever he asks to open a document and after creating or updating one. path is the full local path. Only documents: docx, doc, xlsx, xls, pptx, ppt, pdf, html, htm. Nothing is changed in the file.'
      props = @{ path = @{ type = 'string' } }; required = @('path') }
 )
 
@@ -901,9 +901,21 @@ function Tool-FileOpen($a) {
   $full = (Resolve-Path -LiteralPath $path).ProviderPath
   $ext = [IO.Path]::GetExtension($full).ToLowerInvariant()
   if ($OpenableTypes -notcontains $ext) { throw "פותחים רק מסמכים (Word, Excel, PowerPoint, PDF, HTML), לא $ext." }
-  if ($env:CONSULTING_OFFICE_NO_OPEN) { return "בדיקה: הקובץ לא נפתח ($full)." }
-  Start-Process -FilePath $full
-  return "הקובץ נפתח: $full"
+  $app = switch ($ext) {
+    { $_ -in '.docx', '.doc' } { 'Word. אם Word מבקש, "הפוך עריכה לזמינה".' }
+    { $_ -in '.xlsx', '.xls' } { 'Excel.' }
+    { $_ -in '.pptx', '.ppt' } { 'PowerPoint.' }
+    '.pdf' { 'את תוכנת ה-PDF.' }
+    default { 'את הדפדפן.' }
+  }
+  $cardPath = $full -replace '\\', '/'
+  return @(
+    'הקובץ קיים. לא נפתח חלון: יאן פותח אותו בעצמו. סיים את התשובה בשלוש השורות האלה, בדיוק כך, לא בתוך גרשיים הפוכים ולא בבלוק קוד, ואל תכתוב "נפתח":',
+    '',
+    "לפתיחה: בכרטיס הקובץ שמתחת לתשובה לוחצים Open in ובוחרים $app",
+    "📂 $full",
+    "::codex-file-citation{path=`"$cardPath`" purpose=`"output`"}"
+  ) -join "`n"
 }
 
 $Handlers = @{
