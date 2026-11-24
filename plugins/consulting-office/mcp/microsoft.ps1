@@ -8,6 +8,7 @@
 # Windows DPAPI for the current user. stdout carries JSON-RPC only; diagnostics go to stderr.
 # file_open checks a document on this computer and returns the lines that let the consultant open it himself
 # with one click (a file-card line that shows a card with Open in). It never starts a program: from the sandbox nothing reaches his screen.
+# clients_shortcut puts a desktop shortcut to the clients folder (and a Quick Access pin), his fallback when the card fails.
 # Every write action that reaches other people (send, invitations, cancellations) requires
 # confirmed=true, which the skills set only after the user approved that exact action.
 
@@ -23,7 +24,7 @@ $StdOut.AutoFlush = $true
 # Windows PowerShell 5.1 can serialize arrays as {"value":[...],"Count":n} because of this type data.
 Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue
 
-$ServerVersion = '0.10.7'
+$ServerVersion = '0.10.8'
 $TimeZone = 'Israel Standard Time'
 $Graph = 'https://graph.microsoft.com/v1.0'
 $DataDir = Join-Path $env:APPDATA 'ConsultingOffice'
@@ -344,6 +345,9 @@ $Tools = @(
      props = @{ path = @{ type = 'string' } }; required = @() },
   @{ name = 'file_open'; title = 'פתיחת מסמך'; readOnly = $true
      description = 'Checks that a document exists on this computer and returns the three lines to end the reply with, word for word: how to open it, its folder, and a file-card line that makes a card with Open in appear under the reply, from which the consultant opens the original file in the app he picks. It does not open a window: programs started from here do not reach his screen. Use it whenever he asks to open a document and after creating or updating one. path is the full local path. Only documents: docx, doc, xlsx, xls, pptx, ppt, pdf, html, htm. Nothing is changed in the file.'
+     props = @{ path = @{ type = 'string' } }; required = @('path') },
+  @{ name = 'clients_shortcut'; title = 'קיצור דרך לתיקיית הלקוחות'; readOnly = $false
+     description = 'Puts a shortcut named לקוחות to the clients folder on the consultant''s desktop and pins the folder to Quick Access in File Explorer, so he can always open his documents himself, even when the file card does not appear. path is the full local path of the clients folder (the one that holds _מערכת). Changes nothing inside the folder. Use when he asks for a shortcut to the clients folder, or once, when he says documents do not open.'
      props = @{ path = @{ type = 'string' } }; required = @('path') }
 )
 
@@ -918,6 +922,51 @@ function Tool-FileOpen($a) {
   ) -join "`n"
 }
 
+# A shortcut on the desktop and a Quick Access pin to the clients folder: his way in when the file card fails.
+# Only a folder that is the clients folder (named לקוחות or holding _מערכת); an existing shortcut to another place is left alone.
+function Tool-ClientsShortcut($a) {
+  $path = ([string](Get-Prop $a 'path' '')).Trim().Trim('"').TrimEnd('\', '/')
+  if (-not $path) { throw 'לא נמסר הנתיב של תיקיית הלקוחות.' }
+  $path = [Environment]::ExpandEnvironmentVariables($path)
+  if (-not (Test-Path -LiteralPath $path -PathType Container)) { throw "התיקייה לא נמצאה במחשב: $path" }
+  $full = (Resolve-Path -LiteralPath $path).ProviderPath.TrimEnd('\')
+  $isClients = ((Split-Path -Leaf $full) -eq 'לקוחות') -or (Test-Path -LiteralPath (Join-Path $full '_מערכת') -PathType Container)
+  if (-not $isClients) { throw "זו לא תיקיית הלקוחות (אין בה _מערכת): $full" }
+  $desktop = [Environment]::GetFolderPath('Desktop')
+  if (-not $desktop -or -not (Test-Path -LiteralPath $desktop -PathType Container)) { throw 'לא מצאתי את שולחן העבודה במחשב.' }
+  $lnk = Join-Path $desktop 'לקוחות.lnk'
+  $wsh = New-Object -ComObject WScript.Shell
+  $existed = Test-Path -LiteralPath $lnk
+  if ($existed) {
+    $old = [string]$wsh.CreateShortcut($lnk).TargetPath
+    if ($old -and $old.TrimEnd('\') -ne $full) { throw "על שולחן העבודה כבר יש קיצור דרך בשם לקוחות, לתיקייה אחרת ($old). לא שיניתי אותו." }
+  }
+  $s = $wsh.CreateShortcut($lnk)
+  $s.TargetPath = $full
+  $s.Description = 'תיקיית הלקוחות'
+  $s.Save()
+  if (-not (Test-Path -LiteralPath $lnk)) { throw 'קיצור הדרך לא נוצר על שולחן העבודה.' }
+  $pin = 'לא הצלחתי להצמיד את התיקייה לגישה מהירה, אבל קיצור הדרך עובד.'
+  try {
+    $shellApp = New-Object -ComObject Shell.Application
+    $quick = $shellApp.Namespace('shell:::{679f85cb-0220-4080-b29b-5540cc05aab6}')
+    $isPinned = { param($q) $q -and (@($q.Items()) | Where-Object { [string]$_.Path -eq $full }).Count -gt 0 }
+    if (& $isPinned $quick) { $pin = 'התיקייה כבר מוצמדת לגישה מהירה בסייר הקבצים.' }
+    else {
+      $shellApp.Namespace($full).Self.InvokeVerb('pintohome')
+      Start-Sleep -Milliseconds 700
+      $quick = $shellApp.Namespace('shell:::{679f85cb-0220-4080-b29b-5540cc05aab6}')
+      if (& $isPinned $quick) { $pin = 'התיקייה הוצמדה גם לגישה מהירה בצד השמאלי של סייר הקבצים.' }
+    }
+  } catch { Log "quick access pin failed: $($_.Exception.Message)" }
+  $what = if ($existed) { 'קיצור הדרך כבר היה על שולחן העבודה, והוא מוביל לתיקייה הנכונה.' } else { 'על שולחן העבודה נוצר קיצור דרך בשם לקוחות.' }
+  return @(
+    "$what $pin",
+    "📂 $full",
+    'ספר ליאן בשתי שורות: איפה קיצור הדרך, ושמשם תמיד אפשר לפתוח מסמך בלחיצה כפולה, גם כשאין כרטיס מתחת לתשובה.'
+  ) -join "`n"
+}
+
 $Handlers = @{
   ms_status = ${function:Tool-Status}; ms_configure = ${function:Tool-Configure}; ms_check = ${function:Tool-Check}; ms_admin_link = ${function:Tool-AdminLink}; ms_sign_out = ${function:Tool-SignOut}
   ms_sign_in = ${function:Tool-SignIn}; ms_sign_in_complete = ${function:Tool-SignInComplete}
@@ -929,7 +978,7 @@ $Handlers = @{
   calendar_update_event = ${function:Tool-CalendarUpdate}; calendar_cancel_event = ${function:Tool-CalendarCancel}
   contacts_search = ${function:Tool-ContactsSearch}; contacts_create = ${function:Tool-ContactsCreate}; contacts_update = ${function:Tool-ContactsUpdate}
   onedrive_search = ${function:Tool-OneDriveSearch}; onedrive_list = ${function:Tool-OneDriveList}
-  file_open = ${function:Tool-FileOpen}
+  file_open = ${function:Tool-FileOpen}; clients_shortcut = ${function:Tool-ClientsShortcut}
 }
 
 # ---------- MCP over stdio ----------
