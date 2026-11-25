@@ -1,0 +1,20 @@
+{
+  "profile_id": "yan",
+  "consultant_name": "יאן",
+  "developer_name": "שגיב",
+  "practice": "ייעוץ עסקי וגישור",
+  "language": "he",
+  "date_format": "YYYY/MM/DD",
+  "currency": "₪",
+  "vat_rate": 0.18,
+  "clients_root": "לקוחות",
+  "platform": "ChatGPT",
+  "brand": {
+    "logo": null,
+    "primary_color": null,
+    "deck_template": null
+  },
+  "guide_url": "https://claude.ai/artifact/3uD7z1K3YFuEGWagcebcuY",
+  "marketplace_repo": "lasagiv12/yan-office",
+  "os": "windows"
+}
