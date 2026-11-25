@@ -24,7 +24,7 @@ $StdOut.AutoFlush = $true
 # Windows PowerShell 5.1 can serialize arrays as {"value":[...],"Count":n} because of this type data.
 Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue
 
-$ServerVersion = '0.10.9'
+$ServerVersion = '0.10.10'
 $TimeZone = 'Israel Standard Time'
 $Graph = 'https://graph.microsoft.com/v1.0'
 $DataDir = Join-Path $env:APPDATA 'ConsultingOffice'
@@ -913,11 +913,14 @@ function Tool-FileOpen($a) {
     default { 'את הדפדפן.' }
   }
   $cardPath = $full -replace '\\', '/'
+  $parts = @($full -split '\\' | Where-Object { $_ })
+  $i = [Array]::LastIndexOf([string[]]$parts, 'לקוחות')
+  $where = if ($i -ge 0) { ($parts[$i..($parts.Count - 1)]) -join ' › ' } else { $parts -join ' › ' }
   return @(
     'הקובץ קיים. לא נפתח חלון: יאן פותח אותו בעצמו. סיים את התשובה בשלוש השורות האלה, בדיוק כך, לא בתוך גרשיים הפוכים ולא בבלוק קוד, ואל תכתוב "נפתח":',
     '',
     "לפתיחה: בכרטיס הקובץ שמתחת לתשובה לוחצים Open in ובוחרים $app",
-    "📂 $full",
+    "📂 אם לא נפתח, הקובץ נמצא ב: $where",
     "::codex-file-citation{path=`"$cardPath`" purpose=`"output`"}"
   ) -join "`n"
 }
