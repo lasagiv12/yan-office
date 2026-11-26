@@ -9,6 +9,8 @@
 # file_open checks a document on this computer and returns the lines that let the consultant open it himself
 # with one click (a file-card line that shows a card with Open in). It never starts a program: from the sandbox nothing reaches his screen.
 # clients_shortcut puts a desktop shortcut to the clients folder (and a Quick Access pin), his fallback when the card fails.
+# doc_to_pdf saves a PDF copy of a Word document next to it, through Word itself, invisibly (for summaries sent by mail);
+# mail_create_draft / mail_update_draft attach documents from this computer to the draft.
 # Every write action that reaches other people (send, invitations, cancellations) requires
 # confirmed=true, which the skills set only after the user approved that exact action.
 
@@ -24,7 +26,7 @@ $StdOut.AutoFlush = $true
 # Windows PowerShell 5.1 can serialize arrays as {"value":[...],"Count":n} because of this type data.
 Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue
 
-$ServerVersion = '0.10.11'
+$ServerVersion = '0.10.12'
 $TimeZone = 'Israel Standard Time'
 $Graph = 'https://graph.microsoft.com/v1.0'
 $DataDir = Join-Path $env:APPDATA 'ConsultingOffice'
@@ -305,11 +307,11 @@ $Tools = @(
      description = 'Saves one attachment to a local folder (for example the client''s 07 לתיוק folder). Never overwrites: adds a number if the name exists.'
      props = @{ message_id = @{ type = 'string' }; attachment_id = @{ type = 'string' }; folder = @{ type = 'string' } }; required = @('message_id', 'attachment_id', 'folder') },
   @{ name = 'mail_create_draft'; title = 'טיוטת מייל'; readOnly = $false
-     description = 'Creates a draft in the user''s Outlook Drafts folder (nothing is sent). This is the default for any request to write an email. For a reply pass reply_to_message_id; the text is placed above the quoted message. Body is plain text; Hebrew is fine. To change it afterwards use mail_update_draft, not a second draft.'
-     props = @{ to = @{ type = 'array'; items = @{ type = 'string' } }; cc = @{ type = 'array'; items = @{ type = 'string' } }; subject = @{ type = 'string' }; body = @{ type = 'string' }; reply_to_message_id = @{ type = 'string' } }; required = @('body') },
+     description = 'Creates a draft in the user''s Outlook Drafts folder (nothing is sent). This is the default for any request to write an email. For a reply pass reply_to_message_id; the text is placed above the quoted message. Body is plain text; Hebrew is fine. attachments: full local paths of documents to attach; when a document is attached, the body only introduces it and does not repeat its content. To change it afterwards use mail_update_draft, not a second draft.'
+     props = @{ to = @{ type = 'array'; items = @{ type = 'string' } }; cc = @{ type = 'array'; items = @{ type = 'string' } }; subject = @{ type = 'string' }; body = @{ type = 'string' }; reply_to_message_id = @{ type = 'string' }; attachments = @{ type = 'array'; items = @{ type = 'string' }; description = 'Full local paths of documents to attach (PDF, Word, Excel, PowerPoint; up to 3 MB each), for example the PDF of a meeting summary made with doc_to_pdf.' } }; required = @('body') },
   @{ name = 'mail_update_draft'; title = 'עדכון טיוטה'; readOnly = $false
-     description = 'Changes a draft created earlier (subject, recipients, or the text; a reply keeps its quoted message). Use it for corrections instead of creating another draft. Nothing is sent.'
-     props = @{ draft_id = @{ type = 'string' }; to = @{ type = 'array'; items = @{ type = 'string' } }; cc = @{ type = 'array'; items = @{ type = 'string' } }; subject = @{ type = 'string' }; body = @{ type = 'string' } }; required = @('draft_id') },
+     description = 'Changes a draft created earlier (subject, recipients, the text, or attachments; a reply keeps its quoted message). Use it for corrections instead of creating another draft. attachments are added; an attachment with the same file name is replaced (for example a summary PDF made again). Nothing is sent.'
+     props = @{ draft_id = @{ type = 'string' }; to = @{ type = 'array'; items = @{ type = 'string' } }; cc = @{ type = 'array'; items = @{ type = 'string' } }; subject = @{ type = 'string' }; body = @{ type = 'string' }; attachments = @{ type = 'array'; items = @{ type = 'string' } } }; required = @('draft_id') },
   @{ name = 'mail_send_draft'; title = 'שליחת טיוטה'; readOnly = $false; destructive = $true
      description = 'Sends an existing draft. Works only if sending was enabled in ms_configure (allow_send) and only with confirmed=true after the user approved sending this exact draft.'
      props = @{ draft_id = @{ type = 'string' }; confirmed = @{ type = 'boolean' } }; required = @('draft_id', 'confirmed') },
@@ -345,6 +347,9 @@ $Tools = @(
      props = @{ path = @{ type = 'string' } }; required = @() },
   @{ name = 'file_open'; title = 'פתיחת מסמך'; readOnly = $true
      description = 'Checks that a document exists on this computer and returns the three lines to end the reply with, word for word: how to open it, its folder, and a file-card line that makes a card with Open in appear under the reply, from which the consultant opens the original file in the app he picks. It does not open a window: programs started from here do not reach his screen. Use it whenever he asks to open a document and after creating or updating one. path is the full local path. Only documents: docx, doc, xlsx, xls, pptx, ppt, pdf, html, htm. Nothing is changed in the file.'
+     props = @{ path = @{ type = 'string' } }; required = @('path') },
+  @{ name = 'doc_to_pdf'; title = 'PDF ממסמך Word'; readOnly = $false
+     description = 'Saves a PDF copy of a Word document (docx or doc) next to it, with the same name and .pdf, through Microsoft Word on this computer, without opening a window; an existing PDF with that name is replaced. The Word document is not changed. Use it for every meeting summary that goes to a client by mail, then attach the PDF with mail_create_draft. path is the full local path of the Word document. Returns the PDF path.'
      props = @{ path = @{ type = 'string' } }; required = @('path') },
   @{ name = 'clients_shortcut'; title = 'קיצור דרך לתיקיית הלקוחות'; readOnly = $false
      description = 'Puts a shortcut named לקוחות to the clients folder on the consultant''s desktop and pins the folder to Quick Access in File Explorer, so he can always open his documents himself, even when the file card does not appear. path is the full local path of the clients folder (the one that holds _מערכת). Changes nothing inside the folder. Use when he asks for a shortcut to the clients folder, or once, when he says documents do not open.'
@@ -653,11 +658,48 @@ function Tool-MailSaveAttachment($a) {
   return "נשמר: $target"
 }
 
+# Documents attached to a draft: only from this computer, only documents, up to 3 MB each (Graph's simple upload).
+$AttachableTypes = @('.pdf', '.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt')
+$MaxAttachBytes = 3MB
+
+function Get-AttachmentPaths($a) {
+  $paths = @()
+  foreach ($item in @(Get-Prop $a 'attachments' @())) {
+    $path = ([string]$item).Trim().Trim('"')
+    if (-not $path) { continue }
+    $path = [Environment]::ExpandEnvironmentVariables($path).Replace('/', '\')
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "הקובץ לצירוף לא נמצא במחשב: $path. שום טיוטה לא נוצרה ולא שונתה." }
+    $full = (Resolve-Path -LiteralPath $path).ProviderPath
+    $ext = [IO.Path]::GetExtension($full).ToLowerInvariant()
+    if ($AttachableTypes -notcontains $ext) { throw "מצרפים רק מסמכים (PDF, Word, Excel, PowerPoint), לא $ext. שום טיוטה לא נוצרה ולא שונתה." }
+    if ((Get-Item -LiteralPath $full).Length -gt $MaxAttachBytes) { throw "הקובץ גדול מ-3MB ולא ניתן לצרף אותו מכאן: $full. שום טיוטה לא נוצרה ולא שונתה." }
+    $paths += $full
+  }
+  return $paths
+}
+
+function Add-DraftAttachments($id, $paths) {
+  $names = @()
+  if (@($paths).Count -eq 0) { return $names }
+  $existing = @((Invoke-Graph 'GET' "/me/messages/$id/attachments?`$select=id,name").value)
+  foreach ($full in @($paths)) {
+    $name = [IO.Path]::GetFileName($full)
+    foreach ($old in @($existing | Where-Object { $null -ne $_ -and $_.name -eq $name })) {
+      Invoke-Graph 'DELETE' "/me/messages/$id/attachments/$($old.id)" | Out-Null
+    }
+    $att = @{ '@odata.type' = '#microsoft.graph.fileAttachment'; name = $name; contentBytes = [Convert]::ToBase64String([IO.File]::ReadAllBytes($full)) }
+    Invoke-Graph 'POST' "/me/messages/$id/attachments" $att | Out-Null
+    $names += $name
+  }
+  return $names
+}
+
 function Format-DraftHtml($text) {
   return '<div dir="rtl" style="font-family:Arial">' + [Net.WebUtility]::HtmlEncode([string]$text).Replace("`n", '<br>') + '</div>'
 }
 
 function Tool-MailCreateDraft($a) {
+  $files = @(Get-AttachmentPaths $a)
   $body = [string]$a.body
   $replyTo = Get-Prop $a 'reply_to_message_id' ''
   if ($replyTo) {
@@ -676,10 +718,14 @@ function Tool-MailCreateDraft($a) {
     if ($cc) { $msg['ccRecipients'] = @(To-Recipients $cc) }
     $draft = Invoke-Graph 'POST' '/me/messages' $msg
   }
-  return [ordered]@{ draft_id = $draft.id; subject = $draft.subject; web_link = (Get-Prop $draft 'webLink' ''); note = 'הטיוטה נשמרה בתיקיית הטיוטות ב-Outlook. שום דבר לא נשלח.' }
+  $attached = @(Add-DraftAttachments $draft.id $files)
+  $note = 'הטיוטה נשמרה בתיקיית הטיוטות ב-Outlook. שום דבר לא נשלח.'
+  if ($attached.Count) { $note = "הטיוטה נשמרה בתיקיית הטיוטות ב-Outlook, עם הקבצים המצורפים: $($attached -join ', '). שום דבר לא נשלח." }
+  return [ordered]@{ draft_id = $draft.id; subject = $draft.subject; attachments = $attached; web_link = (Get-Prop $draft 'webLink' ''); note = $note }
 }
 
 function Tool-MailUpdateDraft($a) {
+  $files = @(Get-AttachmentPaths $a)
   $id = [string]$a.draft_id
   $draft = Invoke-Graph 'GET' ("/me/messages/$id" + '?$select=isDraft,subject,body')
   if (-not $draft.isDraft) { throw 'זה לא טיוטה: המייל כבר נשלח, ואי אפשר לשנות אותו.' }
@@ -699,9 +745,12 @@ function Tool-MailUpdateDraft($a) {
     if ($quote.Success) { $html += '<br>' + $old.Substring($quote.Index) }
     $patch['body'] = @{ contentType = 'HTML'; content = $html }
   }
-  if ($patch.Count -eq 0) { throw 'לא נמסר מה לשנות בטיוטה.' }
-  $draft = Invoke-Graph 'PATCH' "/me/messages/$id" $patch
-  return [ordered]@{ draft_id = $draft.id; subject = $draft.subject; web_link = (Get-Prop $draft 'webLink' ''); note = 'הטיוטה עודכנה ב-Outlook. שום דבר לא נשלח.' }
+  if ($patch.Count -eq 0 -and $files.Count -eq 0) { throw 'לא נמסר מה לשנות בטיוטה.' }
+  if ($patch.Count -gt 0) { $draft = Invoke-Graph 'PATCH' "/me/messages/$id" $patch }
+  $attached = @(Add-DraftAttachments $id $files)
+  $note = 'הטיוטה עודכנה ב-Outlook. שום דבר לא נשלח.'
+  if ($attached.Count) { $note = "הטיוטה עודכנה ב-Outlook, עם הקבצים המצורפים: $($attached -join ', '). שום דבר לא נשלח." }
+  return [ordered]@{ draft_id = $id; subject = $draft.subject; attachments = $attached; web_link = (Get-Prop $draft 'webLink' ''); note = $note }
 }
 
 function Tool-MailSendDraft($a) {
@@ -925,6 +974,40 @@ function Tool-FileOpen($a) {
   ) -join "`n"
 }
 
+# A PDF copy of a Word document, next to it, through Word itself (the only renderer that matches his designed
+# templates). Word runs hidden; if Word was already running (his own window), only our document is closed.
+function Tool-DocToPdf($a) {
+  $path = ([string](Get-Prop $a 'path' '')).Trim().Trim('"')
+  if (-not $path) { throw 'לא נמסר מאיזה מסמך ליצור PDF.' }
+  $path = [Environment]::ExpandEnvironmentVariables($path).Replace('/', '\')
+  if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "המסמך לא נמצא במחשב: $path" }
+  $full = (Resolve-Path -LiteralPath $path).ProviderPath
+  $ext = [IO.Path]::GetExtension($full).ToLowerInvariant()
+  if ($ext -notin @('.docx', '.doc')) { throw "יוצרים PDF רק ממסמך Word (docx), לא $ext." }
+  $out = [IO.Path]::ChangeExtension($full, '.pdf')
+  try { $word = New-Object -ComObject Word.Application }
+  catch { throw "WORD_UNAVAILABLE: לא הצלחתי להפעיל את Word במחשב הזה כדי ליצור PDF ($($_.Exception.Message)). המסמך עצמו קיים: $full" }
+  $hadDocs = 0
+  $doc = $null
+  try {
+    try { $hadDocs = [int]$word.Documents.Count } catch { $hadDocs = 0 }
+    if ($hadDocs -eq 0) { $word.Visible = $false }
+    $word.DisplayAlerts = 0
+    # FileName, ConfirmConversions, ReadOnly, AddToRecentFiles
+    $doc = $word.Documents.Open($full, $false, $true, $false)
+    # 17 = wdExportFormatPDF; OpenAfterExport = false
+    $doc.ExportAsFixedFormat($out, 17, $false)
+  } catch {
+    throw "Word לא הצליח ליצור את ה-PDF ($($_.Exception.Message)). אם קובץ PDF בשם הזה פתוח, צריך לסגור אותו ולנסות שוב."
+  } finally {
+    if ($null -ne $doc) { try { $doc.Close(0) | Out-Null } catch {} }
+    if ($hadDocs -eq 0) { try { $word.Quit(0) | Out-Null } catch {} }
+    try { [Runtime.InteropServices.Marshal]::ReleaseComObject($word) | Out-Null } catch {}
+  }
+  if (-not (Test-Path -LiteralPath $out -PathType Leaf)) { throw "Word לא יצר את קובץ ה-PDF: $out" }
+  return [ordered]@{ pdf = $out; note = 'ה-PDF נשמר ליד מסמך ה-Word, באותו שם. מסמך ה-Word לא השתנה.' }
+}
+
 # A shortcut on the desktop and a Quick Access pin to the clients folder: his way in when the file card fails.
 # Only a folder that is the clients folder (named לקוחות or holding _מערכת); an existing shortcut to another place is left alone.
 function Tool-ClientsShortcut($a) {
@@ -981,7 +1064,7 @@ $Handlers = @{
   calendar_update_event = ${function:Tool-CalendarUpdate}; calendar_cancel_event = ${function:Tool-CalendarCancel}
   contacts_search = ${function:Tool-ContactsSearch}; contacts_create = ${function:Tool-ContactsCreate}; contacts_update = ${function:Tool-ContactsUpdate}
   onedrive_search = ${function:Tool-OneDriveSearch}; onedrive_list = ${function:Tool-OneDriveList}
-  file_open = ${function:Tool-FileOpen}; clients_shortcut = ${function:Tool-ClientsShortcut}
+  file_open = ${function:Tool-FileOpen}; clients_shortcut = ${function:Tool-ClientsShortcut}; doc_to_pdf = ${function:Tool-DocToPdf}
 }
 
 # ---------- MCP over stdio ----------

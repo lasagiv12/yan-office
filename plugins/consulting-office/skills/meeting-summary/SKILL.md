@@ -5,7 +5,7 @@ description: Takes what the consultant wrote in a meeting - in the meeting's own
 
 # עדכון התיק מפגישה
 
-קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/meetings-doc.md`, `references/meeting-filing.md`, `references/approval-flow.md`, `references/hebrew-documents.md`.
+קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/meetings-doc.md`, `references/meeting-filing.md`, `references/approval-flow.md`, `references/hebrew-documents.md`, `references/summary-mail.md`.
 
 יאן כותב נקודות קצרות וחופשיות, בדרך שלו. לא מבקשים ממנו לכתוב אחרת, והוא לא צריך לבקש כלום אחרי הפגישה: ההכנה הבאה, או כל שאלה על הלקוח, מעדכנות את התיק לבד. הסקיל הזה הוא למי שרוצה לעדכן עכשיו, להדביק נקודות או לתקן.
 
@@ -33,5 +33,5 @@ description: Takes what the consultant wrote in a meeting - in the meeting's own
 ## בסוף
 לפי `meeting-filing.md` ("מה אומרים בסוף"): מה עודכן, מה לא ועל מה צריך תשובה, ו"משהו לא נכון? כתוב לי מה לתקן". אחריהם ההתקדמות: "הושלמו N מתוך M (P%), נשארו K, מהן L באיחור" (לפי "התקדמות במשימות" ב-`client-file-schema.md`). אחר כך מציעים, בהתאם למה שעלה:
 - **פגישה הבאה:** אם נאמר מועד, לקבוע אותה ביומן (לפי `mail-and-calendar`, אחרי אישור).
-- **מייל סיכום ללקוח:** טיוטה ב-Outlook עם ההחלטות והמשימות של הלקוח, בלי פריטים חסויים ובלי משימות של יאן. רק טיוטה. השליחה לפי ההגדרות ובאישור.
+- **מייל סיכום ללקוח:** לפי `references/summary-mail.md`: מסמך הסיכום ב-Word, PDF ממנו (`doc_to_pdf`), וטיוטה עם ה-PDF מצורף, בנושא `סיכום פגישת ייעוץ – <שם הלקוח> | <DD.MM.YYYY>` ובגוף קצר קבוע ("מצורף סיכום הפגישה מ-..."). לא כותבים את הסיכום בגוף המייל. רק טיוטה. השליחה לפי ההגדרות ובאישור.
 - **סיכום מסודר לשליחה:** לפי הסקיל `client-summary`.

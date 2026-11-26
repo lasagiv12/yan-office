@@ -1,11 +1,11 @@
 ---
 name: client-summary
-description: Writes a clear, organized summary document that anyone can read - of the last meeting, a specific meeting date, a date range, or the whole engagement with a client - from the meeting document, the client file, financial analyses and past summaries. Shareable by default (no confidential items), internal version on request. Use for "צור לי סיכום", "תכין סיכום כללי ל...", "סיכום ייעוץ ל...", "סיכום לפגישה האחרונה עם...", "תסכם את הפגישה עם...", "סיכום של הפגישה מ-<תאריך>", "סיכום מ-<תאריך> עד <תאריך>", "סיכום של החודש / הרבעון עם...", "תכין סיכום מסודר לשליחה".
+description: Writes a clear, organized summary document that anyone can read - of the last meeting, a specific meeting date, a date range, or the whole engagement with a client - from the meeting document, the client file, financial analyses and past summaries. Shareable by default (no confidential items), internal version on request. Use for "צור לי סיכום", "תכין סיכום כללי ל...", "סיכום ייעוץ ל...", "סיכום לפגישה האחרונה עם...", "תסכם את הפגישה עם...", "סיכום של הפגישה מ-<תאריך>", "סיכום מ-<תאריך> עד <תאריך>", "סיכום של החודש / הרבעון עם...", "תכין סיכום מסודר לשליחה". Also every meeting-summary email to a client ("תשלח לדנה את סיכום הפגישה", "מייל סיכום פגישה ל..."): the summary document, a PDF of it attached to an Outlook draft with the fixed subject, never the summary in the mail body.
 ---
 
 # סיכום מסודר ללקוח
 
-קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/meetings-doc.md`, `references/meeting-filing.md`, `references/approval-flow.md`, `references/hebrew-documents.md`.
+קרא קודם: `references/base-rules.md`, `references/data-access.md`, `references/client-file-schema.md`, `references/meetings-doc.md`, `references/meeting-filing.md`, `references/approval-flow.md`, `references/hebrew-documents.md`, `references/summary-mail.md`.
 
 **קודם מעדכנים:** אם יש פגישות שמחכות לתיק, מעדכנים אותן לבד לפי `meeting-filing.md`, ובסוף ההודעה אומרים מה עודכן.
 
@@ -123,4 +123,4 @@ description: Writes a clear, organized summary document that anyone can read - o
 - **העיקר בשלוש שורות.** בסוף התשובה שלוש שורות הפתיחה: "לפתיחה: בכרטיס הקובץ שמתחת לתשובה לוחצים Open in...", `📂 אם לא נפתח, הקובץ נמצא ב: לקוחות › <לקוח> › <תיקייה> › <שם הקובץ>` ושורת כרטיס הקובץ `::codex-file-citation{...}` (כלל 13, `data-access.md`, "פתיחת מסמך במחשב"; בלי קישור `[...](...)`).
 - **אם הושמטו פריטים חסויים:** "זו גרסה שאפשר לשלוח. רוצה גם גרסה פנימית?"
 - **מה עודכן בתיק:** בסוף ההודעה, לפי `meeting-filing.md` ("מה אומרים בסוף"). פגישה שלא עודכנה כי קובץ היה פתוח נכנסת לסיכום בכל זאת, ואומרים את זה.
-- **מייל ללקוח:** אם זו גרסה לשליחה, מציעים טיוטה ב-Outlook עם הסיכום מצורף (לפי `mail-and-calendar`). רק טיוטה, ויאן שולח.
+- **מייל ללקוח:** אם זו גרסה לשליחה, מציעים מייל עם הסיכום. כשמבקשים מייל (גם מראש: "תכין סיכום ותשלח לדנה"), עובדים לפי `references/summary-mail.md`: מסמך הסיכום ב-Word, PDF ממנו (`doc_to_pdf`), וטיוטה עם ה-PDF מצורף, בנושא `סיכום פגישת ייעוץ – <שם הלקוח> | <DD.MM.YYYY>` ובגוף קצר קבוע ("מצורף סיכום הפגישה מ-..."). לסיכום ייעוץ ותקופה הנושא שם. לא כותבים את הסיכום בגוף המייל. רק טיוטה, ויאן שולח.
