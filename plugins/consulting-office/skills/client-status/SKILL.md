@@ -1,6 +1,6 @@
 ---
 name: client-status
-description: Gives a short status picture of one client or of all active clients, straight from the client files. Use for "מה המצב עם...", "תמונת מצב", "מה ההתקדמות של...", "איפה עומדים עם...", "תן לי סטטוס על כל הלקוחות".
+description: Gives a short status picture of one client or of all active clients, straight from the client files. Use for "מה המצב עם...", "תמונת מצב", "איפה עומדים עם...", "תן לי סטטוס על כל הלקוחות".
 ---
 
 # מה המצב עם לקוח

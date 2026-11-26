@@ -1,6 +1,6 @@
 ---
 name: meeting-prep
-description: Prepares the consultant for a client meeting. First files by itself into the client file whatever he wrote in earlier meetings. Then creates a new document for this meeting in his design, and the prep goes into that document, not into the chat: client, date and participants at the top; tables to tick (the previous meeting in short points, the tasks, and topics still open plus new ones to move forward with), reading material, and yellow boxes at the end to write what came up. For a first meeting with a new client - the first-meeting document. Also opens a meeting without prep. Use for "תכין אותי לפגישה עם...", "הכנה לפגישה", "תפתח לי פגישה עם...", "פגישה ראשונה עם...", "מה סוכם בפגישה הקודמת ומה עדיין פתוח", "תכין אותי לפגישות של מחר".
+description: Prepares the consultant for a client meeting. First files by itself into the client file whatever he wrote in earlier meetings. Then creates a new document for this meeting in his design, and the prep goes into that document, not into the chat: client, date and participants at the top; tables to tick (the previous meeting in short points, the tasks, and topics still open plus new ones to move forward with), reading material, and yellow boxes at the end to write what came up. For a first meeting with a new client - the first-meeting document. Also opens a meeting without prep. Use for "תכין אותי לפגישה עם...", "הכנה לפגישה", "תפתח לי פגישה עם...", "פגישה ראשונה עם...", "תכין אותי לפגישות של מחר".
 ---
 
 # הכנה לפגישה

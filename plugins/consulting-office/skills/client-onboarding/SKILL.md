@@ -1,6 +1,6 @@
 ---
 name: client-onboarding
-description: Brings an existing client of the consultant into the system - builds the standard client file from his existing folder, files his documents, imports his task list, reads his financial analyses, rebuilds meeting history from Outlook calendar notes into the client's meeting document, drafts the profile and adds him to the client index, step by step with approval. The history step also runs alone for any client. Use for "תכניס את ... למערכת", "תסדר לי את ההיסטוריה של ... מהיומן", "תשלים את ההיסטוריה של ... מהיומן", "קליטת לקוח קיים", "יש לי לקוח קיים", "תמיר את התיק של ... לפורמט החדש", "תסדר את התיקייה של ...", "תעבור על כל הלקוחות הקיימים".
+description: Brings an existing client of the consultant into the system - builds the standard client file from his existing folder, files his documents, imports his task list, reads his financial analyses, rebuilds meeting history from Outlook calendar notes into the client's meeting document, drafts the profile and adds him to the client index, step by step with approval. The history step also runs alone for any client. Use for "תכניס את ... למערכת", "תסדר לי את ההיסטוריה של ... מהיומן", "תשלים את ההיסטוריה של ... מהיומן", "קליטת לקוח קיים", "יש לי לקוח קיים", "תמיר את התיק של ... לפורמט החדש", "תסדר את התיקייה של ... למערכת", "תעבור על כל הלקוחות הקיימים".
 ---
 
 # קליטת לקוח קיים
