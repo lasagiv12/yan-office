@@ -1,6 +1,6 @@
 ---
 name: meeting-prep
-description: Prepares the consultant for a client meeting. First files by itself into the client file whatever he wrote in earlier meetings. Then creates a new document for this meeting in his design, and the prep goes into that document, not into the chat: client, date and participants at the top; tables to tick (the previous meeting in short points, the tasks, and topics still open plus new ones to move forward with), reading material, and yellow boxes at the end to write what came up. For a first meeting with a new client - the first-meeting document. Also opens a meeting without prep. Use for "תכין אותי לפגישה עם...", "הכנה לפגישה", "תפתח לי פגישה עם...", "פגישה ראשונה עם...", "תכין אותי לפגישות של מחר".
+description: Prepares the consultant for a client meeting. First files by itself into the client file whatever he wrote in earlier meetings. Then creates a new document for this meeting in his design, and the prep goes into that document, not into the chat: client, date and participants at the top; tables to tick (the previous meeting in short points, the tasks, and topics still open plus new ones to move forward with), reading material, and yellow boxes at the end to write what came up. For a first meeting with a new client - the first-meeting document. Also opens a meeting without prep. Use for "תכין אותי לפגישה עם...", "הכנה לפגישה", "הכנה לפגישת המשך", "מסמך לפגישת המשך", "פגישת המשך עם...", "תפתח לי פגישה עם...", "פגישה ראשונה עם...", "תכין אותי לפגישות של מחר".
 ---
 
 # הכנה לפגישה
@@ -10,10 +10,17 @@ description: Prepares the consultant for a client meeting. First files by itself
 יאן מבקש הכנה ומקבל **מסמך לפגישה**, וההכנה כולה בתוכו, וכרטיס קובץ מתחת לתשובה שפותח אותו ב-Word (Open in). **ההכנה לא נכתבת בשיחה:** בשיחה רק שורה שהמסמך מוכן, מה דחוף, ומה עודכן בתיק (סעיף 6). הכל ענייני: מה בוצע, מה נשאר, אצל מי, ומה על הפרק. היסטוריה של פגישה אחרי פגישה לא נכנסת.
 
 ## 1. איזו פגישה
+- **קודם: יש ללקוח תיק?** מחפשים תיקייה בשם הלקוח ב-`לקוחות` (ובאינדקס הלקוחות). **אין תיקייה בשם הזה:** לא יוצרים מסמך, לא ממציאים לקוח "לדוגמה" או "דמה", ולא בונים מסמך מסיכום, מטופס או מקובץ ישן שנמצא במקום אחר (ספריית הקבצים של השיחות, הורדות, שיחה קודמת). עונים: "לא מצאתי בתיקיית הלקוחות לקוח בשם <שם>." ומציעים עד 3 שמות קרובים מהתיקייה, או "לקוח חדש? כתוב 'לקוח חדש: <שם>'" (הסקיל `new-client`).
 - **מהיומן:** הפגישה הבאה עם הלקוח (`calendar_events`), כולל שעה, מקום ומשתתפים.
 - **בלי יומן:** "פגישה הבאה" ב-`tblMeetings` או באינדקס.
 - **אם גם זה לא ידוע,** שואלים מתי הפגישה.
 - **ראשונה או המשך:** לפי `meetings-doc.md` ("איזו פגישה זו"). פגישה ראשונה: סעיף 7. כל השאר: סעיפים 2 עד 6.
+
+## בדיקה אחרונה, לפני כל תשובה עם מסמך
+- הקובץ נמצא ב-`לקוחות/<לקוח קיים>/02 פגישות/`, ושמו בדיוק `<YYYY-MM-DD> פגישה – <לקוח>.docx` (או `פגישה ראשונה – <לקוח>.docx`), עם תאריך אמיתי של הפגישה.
+- **שם אחר הוא טעות שמתקנים לפני ששולחים:** "הכנה לפגישה", "הכנה לפגישת המשך", "פגישת המשך", "לדוגמה", "דמה", שם באנגלית, או תאריך "לתיאום". אם התאריך לא ידוע, שואלים לפני שיוצרים.
+- בשורות לקוח, תאריך ומשתתפים רק נתונים אמיתיים מהתיק ומהיומן. לא "לקוח דמה", לא "משתתפים בתרחיש".
+- התשובה נגמרת בשלוש שורות הפתיחה (כלל 13), ולא בקישור לקובץ ולא בקובץ מצורף.
 
 ## 2. קודם מעדכנים את התיק
 אם יש פגישות שמחכות לתיק, מעדכנים אותן עכשיו, לבד, לפי `meeting-filing.md`. לא שואלים. מה שלא היה ברור עובר ל"טרם עודכן בתיק" במסמך החדש.
